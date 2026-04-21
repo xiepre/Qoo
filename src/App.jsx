@@ -3,7 +3,7 @@ import { Calculator, Download, Plus, Trash2, Save, RotateCcw, Search } from 'luc
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
-  "https://giumltqfcdnheyxionlb.supabase.co",
+   "https://giumltqfcdnheyxionlb.supabase.co",
   "sb_publishable_GL-FpcqD2yhs_ncXYbQUaw_MqA6JaMn"
 );
 
@@ -90,6 +90,97 @@ const NOTES = [
   '懸吊作業費用另計。',
   '單價為未稅金額。',
 ];
+
+const printCss = `
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+
+  @media print {
+    html, body {
+      background: #fff !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+
+    body * {
+      visibility: hidden;
+    }
+
+    #print-root, #print-root * {
+      visibility: visible;
+    }
+
+    #print-root {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      background: #fff !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+
+    .no-print {
+      display: none !important;
+    }
+
+    .print-card {
+      box-shadow: none !important;
+      border: none !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      background: #fff !important;
+    }
+
+    .print-table {
+      width: 100% !important;
+      min-width: 0 !important;
+      border-collapse: collapse !important;
+      table-layout: fixed !important;
+    }
+
+    .print-table th,
+    .print-table td {
+      border: 1px solid #cbd5e1 !important;
+      padding: 8px !important;
+      font-size: 12px !important;
+      color: #000 !important;
+      word-break: break-word;
+    }
+
+    .print-table th {
+      background: #f8fafc !important;
+    }
+
+    .print-notes {
+      margin-top: 16px !important;
+      border: 1px solid #cbd5e1 !important;
+      border-radius: 0 !important;
+      padding: 12px !important;
+      background: #fff !important;
+      font-size: 12px !important;
+      color: #000 !important;
+      line-height: 1.8 !important;
+    }
+
+    .print-header {
+      display: flex !important;
+      justify-content: space-between !important;
+      align-items: flex-start !important;
+      gap: 16px !important;
+      border-bottom: 1px solid #cbd5e1 !important;
+      padding-bottom: 16px !important;
+      margin-bottom: 16px !important;
+    }
+
+    .print-total {
+      font-size: 18px !important;
+      font-weight: 700 !important;
+    }
+  }
+`;
 
 function uniq(arr) {
   return [...new Set(arr)];
@@ -323,7 +414,10 @@ export default function App() {
   }
 
   function exportPdf() {
-    window.print();
+    setTab('preview');
+    setTimeout(() => {
+      window.print();
+    }, 250);
   }
 
   useEffect(() => {
@@ -332,8 +426,10 @@ export default function App() {
 
   return (
     <div style={page}>
+      <style>{printCss}</style>
+
       <div style={container}>
-        <div style={topBar}>
+        <div style={topBar} className="no-print">
           <div>
             <h1 style={title}>好帥報價系統</h1>
             <p style={subtitle}>測試中</p>
@@ -361,7 +457,7 @@ export default function App() {
           </div>
         </div>
 
-        <div style={tabRow}>
+        <div style={tabRow} className="no-print">
           <button onClick={() => setTab('editor')} style={tab === 'editor' ? tabActive : tabStyle} type="button">
             <Calculator size={16} style={{ marginRight: 6 }} />
             報價編輯
@@ -372,7 +468,7 @@ export default function App() {
         </div>
 
         {tab === 'editor' && (
-          <>
+          <div className="no-print">
             {editingId && (
               <div style={warningBox}>
                 ⚠️ 目前為編輯模式，按下「更新報價」會覆蓋原本資料。
@@ -617,12 +713,12 @@ export default function App() {
                 )}
               </div>
             </div>
-          </>
+          </div>
         )}
 
         {tab === 'preview' && (
-          <div style={card}>
-            <div style={previewHeader}>
+          <div id="print-root" style={card} className="print-card">
+            <div style={previewHeader} className="print-header">
               <div>
                 <h2 style={{ fontSize: '32px', fontWeight: 700, margin: 0 }}>正式報價單</h2>
                 <div style={{ marginTop: '12px', color: '#475569', lineHeight: 1.8 }}>
@@ -639,7 +735,7 @@ export default function App() {
             </div>
 
             <div style={{ overflowX: 'auto' }}>
-              <table style={table}>
+              <table style={table} className="print-table">
                 <thead>
                   <tr>
                     <th style={th}>分類</th>
@@ -668,13 +764,18 @@ export default function App() {
                   <tr>
                     <td colSpan="4" style={td}></td>
                     <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>總計</td>
-                    <td style={{ ...td, fontSize: '24px', fontWeight: 700 }}>{money(total)}</td>
+                    <td style={{ ...td, fontSize: '24px', fontWeight: 700 }} className="print-total">
+                      {money(total)}
+                    </td>
                   </tr>
                 </tfoot>
               </table>
             </div>
 
-            <div style={{ ...statCard, marginTop: '24px', fontSize: '14px', color: '#475569', lineHeight: 1.8 }}>
+            <div
+              className="print-notes"
+              style={{ ...statCard, marginTop: '24px', fontSize: '14px', color: '#475569', lineHeight: 1.8 }}
+            >
               {NOTES.map((n, i) => (
                 <div key={i}>{i + 1}. {n}</div>
               ))}
