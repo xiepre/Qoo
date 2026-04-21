@@ -9,12 +9,11 @@ import {
   Search,
   FileDown,
   Database,
-  House,
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
-   "https://giumltqfcdnheyxionlb.supabase.co",
+  "https://giumltqfcdnheyxionlb.supabase.co",
   "sb_publishable_GL-FpcqD2yhs_ncXYbQUaw_MqA6JaMn"
 );
 
@@ -554,6 +553,14 @@ export default function App() {
   }
 
   function downloadCurrentQuotation() {
+    if (rows.length === 0) {
+      alert('目前沒有可下載的報價內容');
+      return;
+    }
+
+    const ok = window.confirm(`確定要下載目前報價「${quoteNo}」嗎？`);
+    if (!ok) return;
+
     const csv = buildCurrentQuotationCsv({
       customer,
       quoteNo,
@@ -566,6 +573,14 @@ export default function App() {
   }
 
   function downloadAllQuotations() {
+    if (history.length === 0) {
+      alert('目前沒有歷史報價可匯出');
+      return;
+    }
+
+    const ok = window.confirm(`確定要匯出全部報價資料嗎？共 ${history.length} 筆`);
+    if (!ok) return;
+
     const csv = buildAllQuotationsCsv(history);
     downloadFile(csv, `all_quotations_${Date.now()}.csv`);
   }
@@ -582,9 +597,6 @@ export default function App() {
         <div style={topBar} className="no-print">
           <button onClick={goHome} style={titleButton} type="button">
             <div style={titleWrap}>
-              <div style={titleIconWrap}>
-                <House size={22} />
-              </div>
               <div>
                 <h1 style={title}>好帥報價系統</h1>
                 <p style={subtitle}>點標題可回首頁</p>
@@ -1045,18 +1057,6 @@ const titleWrap = {
   display: 'flex',
   alignItems: 'center',
   gap: '12px',
-};
-
-const titleIconWrap = {
-  width: '44px',
-  height: '44px',
-  borderRadius: '14px',
-  background: '#0f172a',
-  color: '#fff',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  flexShrink: 0,
 };
 
 const title = {
