@@ -261,14 +261,15 @@ function buildCurrentQuotationCsv({ customer, quoteNo, date, rows, total }) {
   lines.push(['報價單號', quoteNo || '']);
   lines.push(['日期', date || '']);
   lines.push([]);
-  lines.push(['分類', '類型', '項目', '單位', '單價', '小計', '備註']);
+  lines.push(['分類', '類型', '項目', '單位', '份數', '單價', '小計', '備註']);
 
   rows.forEach((row) => {
     lines.push([
       row.category || '',
       row.type || '',
       row.item || '',
-      `${row.qty || 0} 份`,
+      row.unitQty || 0,
+      row.qty || 0,
       row.unitPrice || 0,
       row.subtotal || 0,
       row.note || '',
@@ -276,7 +277,7 @@ function buildCurrentQuotationCsv({ customer, quoteNo, date, rows, total }) {
   });
 
   lines.push([]);
-  lines.push(['總計', '', '', '', '', total || 0, '']);
+  lines.push(['總計', '', '', '', '', '', total || 0, '']);
 
   return lines.map((row) => row.map(escapeCsv).join(',')).join('\n');
 }
@@ -291,6 +292,7 @@ function buildAllQuotationsCsv(history) {
     '類型',
     '項目',
     '單位',
+    '份數',
     '單價',
     '小計',
     '備註',
@@ -312,6 +314,7 @@ function buildAllQuotationsCsv(history) {
         '',
         '',
         '',
+        '',
         quotation.total || 0,
       ]);
       return;
@@ -325,7 +328,8 @@ function buildAllQuotationsCsv(history) {
         row.category || '',
         row.type || '',
         row.item || '',
-        `${row.qty || 0} 份`,
+        row.unitQty || 0,
+        row.qty || 0,
         row.unitPrice || 0,
         row.subtotal || 0,
         row.note || '',
@@ -345,6 +349,7 @@ export default function App() {
   const [category, setCategory] = useState('');
   const [type, setType] = useState('');
   const [item, setItem] = useState('');
+  const [unitQty, setUnitQty] = useState(1);
   const [qty, setQty] = useState(1);
 
   const [rows, setRows] = useState([]);
@@ -373,7 +378,8 @@ export default function App() {
 
   const unitPrice = selected?.[3] || 0;
   const note = selected?.[4] || '';
-  const subtotal = Number(qty || 0) * Number(unitPrice || 0);
+  const subtotal =
+    Number(unitQty || 0) * Number(qty || 0) * Number(unitPrice || 0);
   const total = rows.reduce((sum, row) => sum + Number(row.subtotal || 0), 0);
 
   const filteredHistory = useMemo(() => {
@@ -399,6 +405,7 @@ export default function App() {
     setCategory('');
     setType('');
     setItem('');
+    setUnitQty(1);
     setQty(1);
     setRows([]);
     setEditingId(null);
@@ -409,8 +416,9 @@ export default function App() {
   }
 
   function addRow() {
-    if (!selected || !qty) return;
+    if (!selected || !unitQty || !qty) return;
 
+    const finalUnitQty = Math.max(1, Number(unitQty) || 1);
     const finalQty = Math.max(1, Number(qty) || 1);
 
     setRows((prev) => [
@@ -420,19 +428,37 @@ export default function App() {
         category,
         type,
         item,
+        unitQty: finalUnitQty,
         qty: finalQty,
         unitPrice: Number(unitPrice),
-        subtotal: finalQty * Number(unitPrice),
+        subtotal: finalUnitQty * finalQty * Number(unitPrice),
         note,
       },
     ]);
 
     setItem('');
+    setUnitQty(1);
     setQty(1);
   }
 
   function removeRow(id) {
     setRows((prev) => prev.filter((row) => row.id !== id));
+  }
+
+  function updateRowUnitQty(id, value) {
+    const nextUnitQty = Math.max(1, Number(value) || 1);
+
+    setRows((prev) =>
+      prev.map((row) =>
+        row.id === id
+          ? {
+              ...row,
+              unitQty: nextUnitQty,
+              subtotal: nextUnitQty * Number(row.qty || 0) * Number(row.unitPrice || 0),
+            }
+          : row
+      )
+    );
   }
 
   function updateRowQty(id, value) {
@@ -444,7 +470,7 @@ export default function App() {
           ? {
               ...row,
               qty: nextQty,
-              subtotal: nextQty * Number(row.unitPrice || 0),
+              subtotal: Number(row.unitQty || 0) * nextQty * Number(row.unitPrice || 0),
             }
           : row
       )
@@ -465,14 +491,29 @@ export default function App() {
         return [];
       }
 
-      const list = data || [];
-      setHistory(list);
+      const normalized = (data || []).map((q) => ({
+        ...q,
+        items: Array.isArray(q.items)
+          ? q.items.map((row) => ({
+              ...row,
+              unitQty: Number(row.unitQty || 1),
+              qty: Number(row.qty || 1),
+              subtotal:
+                Number(row.subtotal || 0) ||
+                Number(row.unitPrice || 0) *
+                  Number(row.unitQty || 1) *
+                  Number(row.qty || 1),
+            }))
+          : [],
+      }));
+
+      setHistory(normalized);
 
       if (!editingId) {
-        setQuoteNo(buildNextQuoteNo(list));
+        setQuoteNo(buildNextQuoteNo(normalized));
       }
 
-      return list;
+      return normalized;
     } catch (err) {
       console.error(err);
       alert('讀取歷史報價失敗');
@@ -521,7 +562,21 @@ export default function App() {
         .order('created_at', { ascending: false });
 
       if (!refreshError) {
-        const refreshedList = refreshedData || [];
+        const refreshedList = (refreshedData || []).map((q) => ({
+          ...q,
+          items: Array.isArray(q.items)
+            ? q.items.map((row) => ({
+                ...row,
+                unitQty: Number(row.unitQty || 1),
+                qty: Number(row.qty || 1),
+                subtotal:
+                  Number(row.subtotal || 0) ||
+                  Number(row.unitPrice || 0) *
+                    Number(row.unitQty || 1) *
+                    Number(row.qty || 1),
+              }))
+            : [],
+        }));
         setHistory(refreshedList);
         resetForm(buildNextQuoteNo(refreshedList));
       } else {
@@ -542,11 +597,27 @@ export default function App() {
     setCustomer(q.customer || '');
     setQuoteNo(q.quote_no || '');
     setDate(q.date || todayString());
-    setRows(Array.isArray(q.items) ? cloneRows(q.items) : []);
+    setRows(
+      Array.isArray(q.items)
+        ? cloneRows(
+            q.items.map((row) => ({
+              ...row,
+              unitQty: Number(row.unitQty || 1),
+              qty: Number(row.qty || 1),
+              subtotal:
+                Number(row.subtotal || 0) ||
+                Number(row.unitPrice || 0) *
+                  Number(row.unitQty || 1) *
+                  Number(row.qty || 1),
+            }))
+          )
+        : []
+    );
     setEditingId(q.id);
     setCategory('');
     setType('');
     setItem('');
+    setUnitQty(1);
     setQty(1);
     setTab('editor');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -570,11 +641,25 @@ export default function App() {
     setCustomer('');
     setQuoteNo(buildNextQuoteNo(history));
     setDate(todayString());
-    setRows(cloneRows(sourceRows));
+    setRows(
+      cloneRows(
+        sourceRows.map((row) => ({
+          ...row,
+          unitQty: Number(row.unitQty || 1),
+          qty: Number(row.qty || 1),
+          subtotal:
+            Number(row.subtotal || 0) ||
+            Number(row.unitPrice || 0) *
+              Number(row.unitQty || 1) *
+              Number(row.qty || 1),
+        }))
+      )
+    );
     setEditingId(null);
     setCategory('');
     setType('');
     setItem('');
+    setUnitQty(1);
     setQty(1);
     setTab('editor');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -767,7 +852,7 @@ export default function App() {
               <div style={card}>
                 <h2 style={cardTitle}>新增報價項目</h2>
 
-                <div style={grid4}>
+                <div style={grid5}>
                   <div>
                     <label style={label}>分類</label>
                     <select
@@ -823,32 +908,26 @@ export default function App() {
 
                   <div>
                     <label style={label}>單位</label>
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '10px',
-                      }}
-                    >
-                      <input
-                        style={input}
-                        type="number"
-                        min="1"
-                        step="1"
-                        value={qty}
-                        onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
-                      />
-                      <span
-                        style={{
-                          whiteSpace: 'nowrap',
-                          fontSize: '14px',
-                          color: '#334155',
-                          fontWeight: 600,
-                        }}
-                      >
-                        幾份
-                      </span>
-                    </div>
+                    <input
+                      style={input}
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={unitQty}
+                      onChange={(e) => setUnitQty(Math.max(1, Number(e.target.value) || 1))}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={label}>份數</label>
+                    <input
+                      style={input}
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={qty}
+                      onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
+                    />
                   </div>
                 </div>
 
@@ -869,7 +948,12 @@ export default function App() {
                   </div>
                 </div>
 
-                <button onClick={addRow} disabled={!selected || !qty} style={buttonPrimary} type="button">
+                <button
+                  onClick={addRow}
+                  disabled={!selected || !unitQty || !qty}
+                  style={buttonPrimary}
+                  type="button"
+                >
                   <Plus size={16} style={{ marginRight: 6 }} />
                   加入報價單
                 </button>
@@ -917,6 +1001,7 @@ export default function App() {
                       <th style={th}>類型</th>
                       <th style={th}>項目</th>
                       <th style={th}>單位</th>
+                      <th style={th}>份數</th>
                       <th style={th}>單價</th>
                       <th style={th}>小計</th>
                       <th style={th}>備註</th>
@@ -927,7 +1012,7 @@ export default function App() {
                   <tbody>
                     {rows.length === 0 ? (
                       <tr>
-                        <td colSpan="8" style={emptyTd}>
+                        <td colSpan="9" style={emptyTd}>
                           尚未加入任何項目
                         </td>
                       </tr>
@@ -938,37 +1023,34 @@ export default function App() {
                           <td style={td}>{row.type}</td>
                           <td style={td}>{row.item}</td>
                           <td style={td}>
-                            <div
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={row.unitQty || 1}
+                              onChange={(e) => updateRowUnitQty(row.id, e.target.value)}
                               style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px',
+                                ...input,
+                                width: '110px',
+                                padding: '8px 10px',
+                                borderRadius: '10px',
                               }}
-                            >
-                              <input
-                                type="number"
-                                min="1"
-                                step="1"
-                                value={row.qty}
-                                onChange={(e) => updateRowQty(row.id, e.target.value)}
-                                style={{
-                                  ...input,
-                                  width: '90px',
-                                  padding: '8px 10px',
-                                  borderRadius: '10px',
-                                }}
-                              />
-                              <span
-                                style={{
-                                  whiteSpace: 'nowrap',
-                                  fontSize: '14px',
-                                  color: '#334155',
-                                  fontWeight: 600,
-                                }}
-                              >
-                                份
-                              </span>
-                            </div>
+                            />
+                          </td>
+                          <td style={td}>
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={row.qty}
+                              onChange={(e) => updateRowQty(row.id, e.target.value)}
+                              style={{
+                                ...input,
+                                width: '110px',
+                                padding: '8px 10px',
+                                borderRadius: '10px',
+                              }}
+                            />
                           </td>
                           <td style={td}>{money(row.unitPrice)}</td>
                           <td style={{ ...td, fontWeight: 700 }}>{money(row.subtotal)}</td>
@@ -1079,6 +1161,7 @@ export default function App() {
                     <th style={th}>類型</th>
                     <th style={th}>項目</th>
                     <th style={th}>單位</th>
+                    <th style={th}>份數</th>
                     <th style={th}>單價</th>
                     <th style={th}>小計</th>
                   </tr>
@@ -1087,7 +1170,7 @@ export default function App() {
                 <tbody>
                   {rows.length === 0 ? (
                     <tr>
-                      <td colSpan="6" style={emptyTd}>
+                      <td colSpan="7" style={emptyTd}>
                         尚未加入任何項目
                       </td>
                     </tr>
@@ -1097,7 +1180,8 @@ export default function App() {
                         <td style={td}>{row.category}</td>
                         <td style={td}>{row.type}</td>
                         <td style={td}>{row.item}</td>
-                        <td style={td}>{row.qty} 份</td>
+                        <td style={td}>{row.unitQty || 1}</td>
+                        <td style={td}>{row.qty}</td>
                         <td style={td}>{money(row.unitPrice)}</td>
                         <td style={{ ...td, fontWeight: 700 }}>{money(row.subtotal)}</td>
                       </tr>
@@ -1107,7 +1191,7 @@ export default function App() {
 
                 <tfoot>
                   <tr>
-                    <td colSpan="4" style={td}></td>
+                    <td colSpan="5" style={td}></td>
                     <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>總計</td>
                     <td style={{ ...td, fontSize: '24px', fontWeight: 700 }} className="print-total">
                       {money(total)}
@@ -1314,10 +1398,10 @@ const grid3 = {
   gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
 };
 
-const grid4 = {
+const grid5 = {
   display: 'grid',
   gap: '16px',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
   marginBottom: '20px',
 };
 
@@ -1331,7 +1415,7 @@ const twoCol = {
 const table = {
   width: '100%',
   borderCollapse: 'collapse',
-  minWidth: '900px',
+  minWidth: '1050px',
 };
 
 const th = {
