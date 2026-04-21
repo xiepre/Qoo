@@ -599,7 +599,7 @@ export default function App() {
             <div style={titleWrap}>
               <div>
                 <h1 style={title}>好帥報價系統</h1>
-                <p style={subtitle}>點標題可回首頁</p>
+                <p style={subtitle}>測試中唷</p>
               </div>
             </div>
           </button>
