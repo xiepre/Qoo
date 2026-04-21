@@ -352,6 +352,11 @@ export default function App() {
   const [unitQty, setUnitQty] = useState(1);
   const [qty, setQty] = useState(1);
 
+  const [calcMode, setCalcMode] = useState('rect');
+  const [calcLength, setCalcLength] = useState(1);
+  const [calcWidth, setCalcWidth] = useState(1);
+  const [calcHeight, setCalcHeight] = useState(1);
+
   const [rows, setRows] = useState([]);
   const [history, setHistory] = useState([]);
   const [historySearch, setHistorySearch] = useState('');
@@ -376,8 +381,30 @@ export default function App() {
     [category, type, item]
   );
 
+  useEffect(() => {
+    if (category === '天花板' || category === '地台') {
+      setCalcMode('rect');
+    } else if (category === '背牆' || category === '看板') {
+      setCalcMode('wall');
+    }
+  }, [category]);
+
   const unitPrice = selected?.[3] || 0;
   const note = selected?.[4] || '';
+
+  const calcSquareMeters = useMemo(() => {
+    const l = Number(calcLength || 0);
+    const w = Number(calcWidth || 0);
+    const h = Number(calcHeight || 0);
+
+    if (calcMode === 'rect') return l * w;
+    if (calcMode === 'wall') return l * h;
+    if (calcMode === 'perimeterWall') return (l * 2 + w * 2) * h;
+    return 0;
+  }, [calcMode, calcLength, calcWidth, calcHeight]);
+
+  const calcPing = useMemo(() => calcSquareMeters / 3.305785, [calcSquareMeters]);
+
   const subtotal =
     Number(unitQty || 0) * Number(qty || 0) * Number(unitPrice || 0);
   const total = rows.reduce((sum, row) => sum + Number(row.subtotal || 0), 0);
@@ -407,6 +434,12 @@ export default function App() {
     setItem('');
     setUnitQty(1);
     setQty(1);
+
+    setCalcMode('rect');
+    setCalcLength(1);
+    setCalcWidth(1);
+    setCalcHeight(1);
+
     setRows([]);
     setEditingId(null);
     setHistorySearch('');
@@ -415,10 +448,20 @@ export default function App() {
     else setQuoteNo(buildNextQuoteNo(history));
   }
 
+  function applySquareMetersToUnit() {
+    const value = Number(calcSquareMeters.toFixed(2));
+    setUnitQty(value > 0 ? value : 1);
+  }
+
+  function applyPingToUnit() {
+    const value = Number(calcPing.toFixed(2));
+    setUnitQty(value > 0 ? value : 1);
+  }
+
   function addRow() {
     if (!selected || !unitQty || !qty) return;
 
-    const finalUnitQty = Math.max(1, Number(unitQty) || 1);
+    const finalUnitQty = Math.max(0.01, Number(unitQty) || 1);
     const finalQty = Math.max(1, Number(qty) || 1);
 
     setRows((prev) => [
@@ -446,7 +489,7 @@ export default function App() {
   }
 
   function updateRowUnitQty(id, value) {
-    const nextUnitQty = Math.max(1, Number(value) || 1);
+    const nextUnitQty = Math.max(0.01, Number(value) || 0.01);
 
     setRows((prev) =>
       prev.map((row) =>
@@ -911,10 +954,10 @@ export default function App() {
                     <input
                       style={input}
                       type="number"
-                      min="1"
-                      step="1"
+                      min="0.01"
+                      step="0.01"
                       value={unitQty}
-                      onChange={(e) => setUnitQty(Math.max(1, Number(e.target.value) || 1))}
+                      onChange={(e) => setUnitQty(Math.max(0.01, Number(e.target.value) || 0.01))}
                     />
                   </div>
 
@@ -928,6 +971,87 @@ export default function App() {
                       value={qty}
                       onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
                     />
+                  </div>
+                </div>
+
+                <div style={calcCard}>
+                  <h3 style={calcTitle}>表面積計算機</h3>
+
+                  <div style={grid4}>
+                    <div>
+                      <label style={label}>計算模式</label>
+                      <select
+                        style={input}
+                        value={calcMode}
+                        onChange={(e) => setCalcMode(e.target.value)}
+                      >
+                        <option value="rect">長 × 寬（地台 / 天花）</option>
+                        <option value="wall">長 × 高（背牆 / 看板）</option>
+                        <option value="perimeterWall">四面牆（周長 × 高）</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={label}>長度（m）</label>
+                      <input
+                        style={input}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={calcLength}
+                        onChange={(e) => setCalcLength(Number(e.target.value))}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={label}>寬度（m）</label>
+                      <input
+                        style={input}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={calcWidth}
+                        onChange={(e) => setCalcWidth(Number(e.target.value))}
+                        disabled={calcMode === 'wall'}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={label}>高度（m）</label>
+                      <input
+                        style={input}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={calcHeight}
+                        onChange={(e) => setCalcHeight(Number(e.target.value))}
+                        disabled={calcMode === 'rect'}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ ...grid4, marginTop: '16px' }}>
+                    <div style={statCard}>
+                      <div style={statLabel}>平方公尺</div>
+                      <div style={statValue}>{calcSquareMeters.toFixed(2)} ㎡</div>
+                    </div>
+
+                    <div style={statCard}>
+                      <div style={statLabel}>坪數</div>
+                      <div style={statValue}>{calcPing.toFixed(2)} 坪</div>
+                    </div>
+
+                    <div style={applyCard}>
+                      <button onClick={applySquareMetersToUnit} style={buttonPrimary} type="button">
+                        套用㎡到單位
+                      </button>
+                    </div>
+
+                    <div style={applyCard}>
+                      <button onClick={applyPingToUnit} style={buttonOutline} type="button">
+                        套用坪數到單位
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -1025,8 +1149,8 @@ export default function App() {
                           <td style={td}>
                             <input
                               type="number"
-                              min="1"
-                              step="1"
+                              min="0.01"
+                              step="0.01"
                               value={row.unitQty || 1}
                               onChange={(e) => updateRowUnitQty(row.id, e.target.value)}
                               style={{
@@ -1271,6 +1395,31 @@ const card = {
   boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
 };
 
+const calcCard = {
+  marginTop: '20px',
+  marginBottom: '20px',
+  padding: '20px',
+  border: '1px solid #e2e8f0',
+  borderRadius: '16px',
+  background: '#f8fafc',
+};
+
+const calcTitle = {
+  fontSize: '18px',
+  fontWeight: 700,
+  margin: '0 0 16px 0',
+  color: '#0f172a',
+};
+
+const applyCard = {
+  ...card,
+  padding: '16px',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  minHeight: '110px',
+};
+
 const cardTitle = {
   fontSize: '20px',
   fontWeight: 700,
@@ -1396,6 +1545,12 @@ const grid3 = {
   display: 'grid',
   gap: '16px',
   gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+};
+
+const grid4 = {
+  display: 'grid',
+  gap: '16px',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
 };
 
 const grid5 = {
