@@ -9,11 +9,12 @@ import {
   Search,
   FileDown,
   Database,
+  House,
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
-  "https://giumltqfcdnheyxionlb.supabase.co",
+   "https://giumltqfcdnheyxionlb.supabase.co",
   "sb_publishable_GL-FpcqD2yhs_ncXYbQUaw_MqA6JaMn"
 );
 
@@ -389,6 +390,12 @@ export default function App() {
     else setQuoteNo(buildNextQuoteNo(history));
   }
 
+  function goHome() {
+    resetForm(buildNextQuoteNo(history));
+    setTab('editor');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   function addRow() {
     if (!selected || !qty) return;
 
@@ -573,10 +580,17 @@ export default function App() {
 
       <div style={container}>
         <div style={topBar} className="no-print">
-          <div>
-            <h1 style={title}>好帥報價系統</h1>
-            <p style={subtitle}>測試中</p>
-          </div>
+          <button onClick={goHome} style={titleButton} type="button">
+            <div style={titleWrap}>
+              <div style={titleIconWrap}>
+                <House size={22} />
+              </div>
+              <div>
+                <h1 style={title}>好帥報價系統</h1>
+                <p style={subtitle}>點標題可回首頁</p>
+              </div>
+            </div>
+          </button>
 
           <div style={buttonGroup}>
             <button
@@ -1018,15 +1032,44 @@ const topBar = {
   flexWrap: 'wrap',
 };
 
+const titleButton = {
+  border: 'none',
+  background: 'transparent',
+  padding: 0,
+  margin: 0,
+  cursor: 'pointer',
+  textAlign: 'left',
+};
+
+const titleWrap = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '12px',
+};
+
+const titleIconWrap = {
+  width: '44px',
+  height: '44px',
+  borderRadius: '14px',
+  background: '#0f172a',
+  color: '#fff',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  flexShrink: 0,
+};
+
 const title = {
   fontSize: '32px',
   fontWeight: 700,
   margin: 0,
+  color: '#0f172a',
 };
 
 const subtitle = {
   color: '#64748b',
   marginTop: '8px',
+  marginBottom: 0,
 };
 
 const buttonGroup = {
