@@ -335,7 +335,7 @@ export default function App() {
       <div style={container}>
         <div style={topBar}>
           <div>
-            <h1 style={title}>展場報價系統</h1>
+            <h1 style={title}>好帥報價系統</h1>
             <p style={subtitle}>正式版 Web App</p>
           </div>
 
