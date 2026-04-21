@@ -221,8 +221,8 @@ function buildNextQuoteNo(history) {
   return `${prefix}${next}`;
 }
 
-function downloadFile(data, filename, type = 'application/json;charset=utf-8;') {
-  const blob = new Blob([data], { type });
+function downloadFile(data, filename, type = 'text/csv;charset=utf-8;') {
+  const blob = new Blob(['\uFEFF' + data], { type });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -231,6 +231,94 @@ function downloadFile(data, filename, type = 'application/json;charset=utf-8;') 
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+function escapeCsv(value) {
+  const text = String(value ?? '');
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function buildCurrentQuotationCsv({ customer, quoteNo, date, rows, total }) {
+  const lines = [];
+
+  lines.push(['客戶名稱', customer || '']);
+  lines.push(['報價單號', quoteNo || '']);
+  lines.push(['日期', date || '']);
+  lines.push([]);
+  lines.push(['分類', '類型', '項目', '數量', '單價', '小計', '備註']);
+
+  rows.forEach((row) => {
+    lines.push([
+      row.category || '',
+      row.type || '',
+      row.item || '',
+      row.qty || 0,
+      row.unitPrice || 0,
+      row.subtotal || 0,
+      row.note || '',
+    ]);
+  });
+
+  lines.push([]);
+  lines.push(['總計', '', '', '', '', total || 0, '']);
+
+  return lines.map((row) => row.map(escapeCsv).join(',')).join('\n');
+}
+
+function buildAllQuotationsCsv(history) {
+  const lines = [];
+  lines.push([
+    '客戶名稱',
+    '報價單號',
+    '日期',
+    '分類',
+    '類型',
+    '項目',
+    '數量',
+    '單價',
+    '小計',
+    '備註',
+    '報價總計',
+  ]);
+
+  history.forEach((quotation) => {
+    const items = Array.isArray(quotation.items) ? quotation.items : [];
+
+    if (items.length === 0) {
+      lines.push([
+        quotation.customer || '',
+        quotation.quote_no || '',
+        quotation.date || '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        quotation.total || 0,
+      ]);
+      return;
+    }
+
+    items.forEach((row) => {
+      lines.push([
+        quotation.customer || '',
+        quotation.quote_no || '',
+        quotation.date || '',
+        row.category || '',
+        row.type || '',
+        row.item || '',
+        row.qty || 0,
+        row.unitPrice || 0,
+        row.subtotal || 0,
+        row.note || '',
+        quotation.total || 0,
+      ]);
+    });
+  });
+
+  return lines.map((row) => row.map(escapeCsv).join(',')).join('\n');
 }
 
 export default function App() {
@@ -459,26 +547,20 @@ export default function App() {
   }
 
   function downloadCurrentQuotation() {
-    const payload = {
+    const csv = buildCurrentQuotationCsv({
       customer,
-      quote_no: quoteNo,
+      quoteNo,
       date,
-      items: rows,
+      rows,
       total,
-      exported_at: new Date().toISOString(),
-    };
+    });
 
-    downloadFile(
-      JSON.stringify(payload, null, 2),
-      `${quoteNo || 'quotation'}.json`
-    );
+    downloadFile(csv, `${quoteNo || 'quotation'}.csv`);
   }
 
   function downloadAllQuotations() {
-    downloadFile(
-      JSON.stringify(history, null, 2),
-      `all_quotations_${Date.now()}.json`
-    );
+    const csv = buildAllQuotationsCsv(history);
+    downloadFile(csv, `all_quotations_${Date.now()}.csv`);
   }
 
   useEffect(() => {
@@ -691,7 +773,12 @@ export default function App() {
                   <div style={statValue}>{rows.length}</div>
                 </div>
 
-                <div style={{ ...statCard, marginTop: '16px' }}>
+                <div
+                  style={{
+                    ...statCard,
+                    marginTop: '16px',
+                  }}
+                >
                   <div style={statLabel}>總計（未稅）</div>
                   <div style={{ fontSize: '32px', fontWeight: 700 }}>{money(total)}</div>
                 </div>
