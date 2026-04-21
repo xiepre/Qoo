@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Calculator, Download, Plus, Trash2 } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Calculator, Download, Plus, Trash2, Save, RotateCcw, Search } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -91,7 +91,7 @@ const NOTES = [
   '單價為未稅金額。',
 ];
 
-function unique(arr) {
+function uniq(arr) {
   return [...new Set(arr)];
 }
 
@@ -99,34 +99,92 @@ function money(n) {
   return `NT$ ${Number(n || 0).toLocaleString('zh-TW')}`;
 }
 
+function todayString() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function todayCompact() {
+  return todayString().replace(/-/g, '');
+}
+
+function buildNextQuoteNo(history) {
+  const prefix = `Q${todayCompact()}-`;
+  const sameDay = (history || []).filter((q) => String(q.quote_no || '').startsWith(prefix));
+  let max = 0;
+  sameDay.forEach((q) => {
+    const no = String(q.quote_no || '').split('-').pop();
+    const num = Number(no);
+    if (!Number.isNaN(num) && num > max) max = num;
+  });
+  const next = String(max + 1).padStart(3, '0');
+  return `${prefix}${next}`;
+}
+
 export default function App() {
   const [customer, setCustomer] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [quoteNo, setQuoteNo] = useState(`Q${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-001`);
+  const [date, setDate] = useState(todayString());
+  const [quoteNo, setQuoteNo] = useState(`Q${todayCompact()}-001`);
+
   const [category, setCategory] = useState('');
   const [type, setType] = useState('');
   const [item, setItem] = useState('');
   const [qty, setQty] = useState(1);
+
   const [rows, setRows] = useState([]);
   const [history, setHistory] = useState([]);
+  const [historySearch, setHistorySearch] = useState('');
+
+  const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [tab, setTab] = useState('editor');
 
-  const categories = unique(PRICE_DATA.map(([c]) => c));
-  const types = unique(PRICE_DATA.filter(([c]) => c === category).map(([, t]) => t));
-  const items = unique(PRICE_DATA.filter(([c, t]) => c === category && t === type).map(([, , i]) => i));
+  const categories = useMemo(() => uniq(PRICE_DATA.map(([c]) => c)), []);
+  const types = useMemo(
+    () => uniq(PRICE_DATA.filter(([c]) => c === category).map(([, t]) => t)),
+    [category]
+  );
+  const items = useMemo(
+    () => uniq(PRICE_DATA.filter(([c, t]) => c === category && t === type).map(([, , i]) => i)),
+    [category, type]
+  );
 
-  const selected = PRICE_DATA.find(([c, t, i]) => c === category && t === type && i === item);
+  const selected = useMemo(
+    () => PRICE_DATA.find(([c, t, i]) => c === category && t === type && i === item),
+    [category, type, item]
+  );
+
   const unitPrice = selected?.[3] || 0;
   const note = selected?.[4] || '';
-  const subtotal = Number(qty || 0) * unitPrice;
+  const subtotal = Number(qty || 0) * Number(unitPrice || 0);
   const total = rows.reduce((sum, row) => sum + Number(row.subtotal || 0), 0);
+
+  const filteredHistory = useMemo(() => {
+    const keyword = historySearch.trim().toLowerCase();
+    if (!keyword) return history;
+    return history.filter((q) => {
+      const customerText = String(q.customer || '').toLowerCase();
+      const quoteText = String(q.quote_no || '').toLowerCase();
+      return customerText.includes(keyword) || quoteText.includes(keyword);
+    });
+  }, [history, historySearch]);
 
   function resetSelectors(nextCategory = '') {
     setCategory(nextCategory);
     setType('');
     setItem('');
+  }
+
+  function resetForm(newQuoteNo) {
+    setCustomer('');
+    setDate(todayString());
+    setCategory('');
+    setType('');
+    setItem('');
+    setQty(1);
+    setRows([]);
+    setEditingId(null);
+    if (newQuoteNo) setQuoteNo(newQuoteNo);
   }
 
   function addRow() {
@@ -140,8 +198,8 @@ export default function App() {
         type,
         item,
         qty: Number(qty),
-        unitPrice,
-        subtotal,
+        unitPrice: Number(unitPrice),
+        subtotal: Number(subtotal),
         note,
       },
     ]);
@@ -152,6 +210,34 @@ export default function App() {
 
   function removeRow(id) {
     setRows((prev) => prev.filter((row) => row.id !== id));
+  }
+
+  async function loadHistory() {
+    try {
+      setLoadingHistory(true);
+      const { data, error } = await supabase
+        .from('quotations')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error(error);
+        alert('讀取歷史報價失敗');
+        return;
+      }
+
+      const list = data || [];
+      setHistory(list);
+
+      if (!editingId) {
+        setQuoteNo(buildNextQuoteNo(list));
+      }
+    } catch (err) {
+      console.error(err);
+      alert('讀取歷史報價失敗');
+    } finally {
+      setLoadingHistory(false);
+    }
   }
 
   async function saveQuotation() {
@@ -171,49 +257,69 @@ export default function App() {
         total,
       };
 
-      const { error } = await supabase.from('quotations').insert([payload]);
+      let error;
+
+      if (editingId) {
+        ({ error } = await supabase.from('quotations').update(payload).eq('id', editingId));
+      } else {
+        ({ error } = await supabase.from('quotations').insert([payload]));
+      }
 
       if (error) {
         console.error(error);
-        alert('儲存失敗');
+        alert(editingId ? '更新失敗' : '儲存失敗');
         return;
       }
 
-      alert('儲存成功');
+      alert(editingId ? '更新成功' : '儲存成功');
       await loadHistory();
+      const nextNo = buildNextQuoteNo(history);
+      resetForm(nextNo);
+      setTab('editor');
     } catch (err) {
       console.error(err);
-      alert('儲存失敗');
+      alert(editingId ? '更新失敗' : '儲存失敗');
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function loadHistory() {
-    try {
-      setLoadingHistory(true);
-      const { data, error } = await supabase
-        .from('quotations')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error(error);
-        return;
-      }
-
-      setHistory(data || []);
-    } finally {
-      setLoadingHistory(false);
     }
   }
 
   function loadQuotation(q) {
     setCustomer(q.customer || '');
     setQuoteNo(q.quote_no || '');
-    setDate(q.date || new Date().toISOString().slice(0, 10));
+    setDate(q.date || todayString());
     setRows(Array.isArray(q.items) ? q.items : []);
+    setEditingId(q.id);
+    setCategory('');
+    setType('');
+    setItem('');
+    setQty(1);
     setTab('editor');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function deleteQuotation(id) {
+    const ok = window.confirm('確定刪除此筆報價？');
+    if (!ok) return;
+
+    try {
+      const { error } = await supabase.from('quotations').delete().eq('id', id);
+      if (error) {
+        console.error(error);
+        alert('刪除失敗');
+        return;
+      }
+
+      if (editingId === id) {
+        resetForm();
+      }
+
+      await loadHistory();
+      alert('刪除成功');
+    } catch (err) {
+      console.error(err);
+      alert('刪除失敗');
+    }
   }
 
   function exportPdf() {
@@ -225,42 +331,57 @@ export default function App() {
   }, []);
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc', padding: '24px' }}>
-      <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
+    <div style={page}>
+      <div style={container}>
         <div style={topBar}>
           <div>
-            <h1 style={{ fontSize: '32px', fontWeight: 700, margin: 0 }}>展場報價系統</h1>
-            <p style={{ color: '#64748b', marginTop: '8px' }}>正式版 Web App</p>
+            <h1 style={title}>展場報價系統</h1>
+            <p style={subtitle}>正式版 Web App</p>
           </div>
 
           <div style={buttonGroup}>
-            <button onClick={() => window.location.reload()} style={buttonOutline}>
-              重置
+            <button
+              onClick={() => resetForm(buildNextQuoteNo(history))}
+              style={buttonOutline}
+              type="button"
+            >
+              <RotateCcw size={16} style={{ marginRight: 6 }} />
+              清空
             </button>
-            <button onClick={saveQuotation} disabled={saving} style={buttonPrimary}>
-              {saving ? '儲存中...' : '儲存報價'}
+
+            <button onClick={saveQuotation} disabled={saving} style={buttonPrimary} type="button">
+              <Save size={16} style={{ marginRight: 6 }} />
+              {saving ? '儲存中...' : editingId ? '更新報價' : '儲存報價'}
             </button>
-            <button onClick={exportPdf} style={buttonPrimary}>
+
+            <button onClick={exportPdf} style={buttonPrimary} type="button">
               <Download size={16} style={{ marginRight: 6 }} />
               列印 / 匯出 PDF
             </button>
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
-          <button onClick={() => setTab('editor')} style={tab === 'editor' ? tabActive : tabStyle}>
+        <div style={tabRow}>
+          <button onClick={() => setTab('editor')} style={tab === 'editor' ? tabActive : tabStyle} type="button">
             <Calculator size={16} style={{ marginRight: 6 }} />
             報價編輯
           </button>
-          <button onClick={() => setTab('preview')} style={tab === 'preview' ? tabActive : tabStyle}>
+          <button onClick={() => setTab('preview')} style={tab === 'preview' ? tabActive : tabStyle} type="button">
             正式報價單
           </button>
         </div>
 
         {tab === 'editor' && (
           <>
+            {editingId && (
+              <div style={warningBox}>
+                ⚠️ 目前為編輯模式，按下「更新報價」會覆蓋原本資料。
+              </div>
+            )}
+
             <div style={card}>
               <h2 style={cardTitle}>基本資料</h2>
+
               <div style={grid3}>
                 <div>
                   <label style={label}>客戶名稱</label>
@@ -293,7 +414,7 @@ export default function App() {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '24px', marginTop: '24px' }}>
+            <div style={twoCol}>
               <div style={card}>
                 <h2 style={cardTitle}>新增報價項目</h2>
 
@@ -371,7 +492,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <button onClick={addRow} disabled={!selected || !qty} style={buttonPrimary}>
+                <button onClick={addRow} disabled={!selected || !qty} style={buttonPrimary} type="button">
                   <Plus size={16} style={{ marginRight: 6 }} />
                   加入報價單
                 </button>
@@ -432,7 +553,7 @@ export default function App() {
                           <td style={{ ...td, fontWeight: 700 }}>{money(row.subtotal)}</td>
                           <td style={td}>{row.note || '—'}</td>
                           <td style={td}>
-                            <button onClick={() => removeRow(row.id)} style={iconButton}>
+                            <button onClick={() => removeRow(row.id)} style={iconButton} type="button">
                               <Trash2 size={16} />
                             </button>
                           </td>
@@ -445,31 +566,50 @@ export default function App() {
             </div>
 
             <div style={{ ...card, marginTop: '24px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+              <div style={historyHeader}>
                 <h2 style={{ ...cardTitle, marginBottom: 0 }}>歷史報價</h2>
-                <button onClick={loadHistory} style={buttonOutline}>
-                  {loadingHistory ? '讀取中...' : '重新整理歷史資料'}
-                </button>
+
+                <div style={historyToolbar}>
+                  <div style={searchWrap}>
+                    <Search size={16} style={{ color: '#64748b' }} />
+                    <input
+                      style={searchInput}
+                      placeholder="搜尋客戶 / 報價單號"
+                      value={historySearch}
+                      onChange={(e) => setHistorySearch(e.target.value)}
+                    />
+                  </div>
+
+                  <button onClick={loadHistory} style={buttonOutline} type="button">
+                    {loadingHistory ? '讀取中...' : '重新整理'}
+                  </button>
+                </div>
               </div>
 
               <div style={{ marginTop: '16px' }}>
                 {loadingHistory ? (
                   <div style={{ color: '#64748b' }}>讀取中...</div>
-                ) : history.length === 0 ? (
+                ) : filteredHistory.length === 0 ? (
                   <div style={{ color: '#64748b' }}>尚無歷史報價</div>
                 ) : (
-                  history.map((q) => (
+                  filteredHistory.map((q) => (
                     <div key={q.id} style={historyCard}>
                       <div>
-                        <div style={{ fontWeight: 700 }}>{q.customer || '未命名客戶'}</div>
-                        <div style={{ color: '#64748b', marginTop: '4px' }}>報價單號：{q.quote_no || '—'}</div>
-                        <div style={{ color: '#64748b', marginTop: '4px' }}>日期：{q.date || '—'}</div>
-                        <div style={{ color: '#0f172a', marginTop: '8px', fontWeight: 700 }}>{money(q.total)}</div>
+                        <div style={{ fontWeight: 700, fontSize: '18px' }}>{q.customer || '未命名客戶'}</div>
+                        <div style={mutedLine}>報價單號：{q.quote_no || '—'}</div>
+                        <div style={mutedLine}>日期：{q.date || '—'}</div>
+                        <div style={mutedLine}>項目數：{Array.isArray(q.items) ? q.items.length : 0}</div>
+                        <div style={{ color: '#0f172a', marginTop: '8px', fontWeight: 700, fontSize: '20px' }}>
+                          {money(q.total)}
+                        </div>
                       </div>
 
-                      <div>
-                        <button onClick={() => loadQuotation(q)} style={buttonPrimary}>
+                      <div style={historyActionGroup}>
+                        <button onClick={() => loadQuotation(q)} style={buttonPrimary} type="button">
                           載入
+                        </button>
+                        <button onClick={() => deleteQuotation(q.id)} style={buttonDanger} type="button">
+                          刪除
                         </button>
                       </div>
                     </div>
@@ -546,6 +686,17 @@ export default function App() {
   );
 }
 
+const page = {
+  minHeight: '100vh',
+  background: '#f8fafc',
+  padding: '24px',
+};
+
+const container = {
+  maxWidth: '1280px',
+  margin: '0 auto',
+};
+
 const topBar = {
   display: 'flex',
   justifyContent: 'space-between',
@@ -553,6 +704,17 @@ const topBar = {
   gap: '16px',
   marginBottom: '24px',
   flexWrap: 'wrap',
+};
+
+const title = {
+  fontSize: '32px',
+  fontWeight: 700,
+  margin: 0,
+};
+
+const subtitle = {
+  color: '#64748b',
+  marginTop: '8px',
 };
 
 const buttonGroup = {
@@ -590,6 +752,7 @@ const input = {
   border: '1px solid #cbd5e1',
   fontSize: '14px',
   boxSizing: 'border-box',
+  background: '#fff',
 };
 
 const buttonPrimary = {
@@ -620,6 +783,27 @@ const buttonOutline = {
   fontWeight: 600,
 };
 
+const buttonDanger = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '12px 16px',
+  borderRadius: '12px',
+  border: 'none',
+  background: '#e11d48',
+  color: '#fff',
+  cursor: 'pointer',
+  fontSize: '14px',
+  fontWeight: 600,
+};
+
+const tabRow = {
+  display: 'flex',
+  gap: '12px',
+  marginBottom: '24px',
+  flexWrap: 'wrap',
+};
+
 const tabStyle = {
   display: 'inline-flex',
   alignItems: 'center',
@@ -638,6 +822,16 @@ const tabActive = {
   background: '#0f172a',
   color: '#fff',
   border: '1px solid #0f172a',
+};
+
+const warningBox = {
+  marginBottom: '16px',
+  padding: '14px 16px',
+  borderRadius: '14px',
+  background: '#fff7ed',
+  border: '1px solid #fdba74',
+  color: '#9a3412',
+  fontWeight: 600,
 };
 
 const statCard = {
@@ -669,6 +863,13 @@ const grid4 = {
   gap: '16px',
   gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
   marginBottom: '20px',
+};
+
+const twoCol = {
+  display: 'grid',
+  gridTemplateColumns: '1.2fr 0.8fr',
+  gap: '24px',
+  marginTop: '24px',
 };
 
 const table = {
@@ -710,6 +911,40 @@ const iconButton = {
   cursor: 'pointer',
 };
 
+const historyHeader = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: '16px',
+  flexWrap: 'wrap',
+};
+
+const historyToolbar = {
+  display: 'flex',
+  gap: '12px',
+  alignItems: 'center',
+  flexWrap: 'wrap',
+};
+
+const searchWrap = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+  border: '1px solid #cbd5e1',
+  borderRadius: '12px',
+  padding: '0 12px',
+  background: '#fff',
+};
+
+const searchInput = {
+  border: 'none',
+  outline: 'none',
+  padding: '12px 0',
+  minWidth: '220px',
+  fontSize: '14px',
+  background: 'transparent',
+};
+
 const historyCard = {
   border: '1px solid #e2e8f0',
   borderRadius: '16px',
@@ -720,6 +955,18 @@ const historyCard = {
   alignItems: 'center',
   gap: '16px',
   flexWrap: 'wrap',
+  background: '#fff',
+};
+
+const historyActionGroup = {
+  display: 'flex',
+  gap: '10px',
+  flexWrap: 'wrap',
+};
+
+const mutedLine = {
+  color: '#64748b',
+  marginTop: '4px',
 };
 
 const previewHeader = {
