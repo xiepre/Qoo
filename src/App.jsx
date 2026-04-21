@@ -9,12 +9,13 @@ import {
   Search,
   FileDown,
   Database,
+  CopyPlus,
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
-  "https://giumltqfcdnheyxionlb.supabase.co",
-  "sb_publishable_GL-FpcqD2yhs_ncXYbQUaw_MqA6JaMn"
+   "https://giumltqfcdnheyxionlb.supabase.co",
+  "sb_publishable_GL-FpcqD2yhs_ncXYbQUaw_MqA6JaMn"'
 );
 
 const PRICE_DATA = [
@@ -221,6 +222,19 @@ function buildNextQuoteNo(history) {
   return `${prefix}${next}`;
 }
 
+function makeRowId() {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random()}`;
+}
+
+function cloneRows(rows) {
+  return (rows || []).map((row) => ({
+    ...row,
+    id: makeRowId(),
+  }));
+}
+
 function downloadFile(data, filename, type = 'text/csv;charset=utf-8;') {
   const blob = new Blob(['\uFEFF' + data], { type });
   const url = URL.createObjectURL(blob);
@@ -240,7 +254,6 @@ function escapeCsv(value) {
 
 function buildCurrentQuotationCsv({ customer, quoteNo, date, rows, total }) {
   const lines = [];
-
   lines.push(['客戶名稱', customer || '']);
   lines.push(['報價單號', quoteNo || '']);
   lines.push(['日期', date || '']);
@@ -389,22 +402,13 @@ export default function App() {
     else setQuoteNo(buildNextQuoteNo(history));
   }
 
-  function goHome() {
-    resetForm(buildNextQuoteNo(history));
-    setTab('editor');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
   function addRow() {
     if (!selected || !qty) return;
 
     setRows((prev) => [
       ...prev,
       {
-        id:
-          typeof crypto !== 'undefined' && crypto.randomUUID
-            ? crypto.randomUUID()
-            : `${Date.now()}-${Math.random()}`,
+        id: makeRowId(),
         category,
         type,
         item,
@@ -511,8 +515,32 @@ export default function App() {
     setCustomer(q.customer || '');
     setQuoteNo(q.quote_no || '');
     setDate(q.date || todayString());
-    setRows(Array.isArray(q.items) ? q.items : []);
+    setRows(Array.isArray(q.items) ? cloneRows(q.items) : []);
     setEditingId(q.id);
+    setCategory('');
+    setType('');
+    setItem('');
+    setQty(1);
+    setTab('editor');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function duplicateQuotationToNewCustomer(source) {
+    const sourceRows = Array.isArray(source?.items) ? source.items : source?.rows || rows;
+
+    if (!sourceRows || sourceRows.length === 0) {
+      alert('這張報價沒有可複製的項目');
+      return;
+    }
+
+    const ok = window.confirm('要用這張報價建立「新客戶報價」嗎？會保留項目並清空客戶名稱。');
+    if (!ok) return;
+
+    setCustomer('');
+    setQuoteNo(buildNextQuoteNo(history));
+    setDate(todayString());
+    setRows(cloneRows(sourceRows));
+    setEditingId(null);
     setCategory('');
     setType('');
     setItem('');
@@ -595,14 +623,11 @@ export default function App() {
 
       <div style={container}>
         <div style={topBar} className="no-print">
-          <button onClick={goHome} style={titleButton} type="button">
-            <div style={titleWrap}>
-              <div>
-                <h1 style={title}>好帥報價系統</h1>
-                <p style={subtitle}>測試中唷</p>
-              </div>
+          <div style={titleWrap}>
+            <div>
+              <h1 style={title}>好帥報價系統</h1>
             </div>
-          </button>
+          </div>
 
           <div style={buttonGroup}>
             <button
@@ -612,6 +637,16 @@ export default function App() {
             >
               <RotateCcw size={16} style={{ marginRight: 6 }} />
               清空
+            </button>
+
+            <button
+              onClick={() => duplicateQuotationToNewCustomer({ rows })}
+              style={buttonOutline}
+              type="button"
+              disabled={rows.length === 0}
+            >
+              <CopyPlus size={16} style={{ marginRight: 6 }} />
+              另存新客戶
             </button>
 
             <button onClick={saveQuotation} disabled={saving} style={buttonPrimary} type="button">
@@ -799,12 +834,7 @@ export default function App() {
                   <div style={statValue}>{rows.length}</div>
                 </div>
 
-                <div
-                  style={{
-                    ...statCard,
-                    marginTop: '16px',
-                  }}
-                >
+                <div style={{ ...statCard, marginTop: '16px' }}>
                   <div style={statLabel}>總計（未稅）</div>
                   <div style={{ fontSize: '32px', fontWeight: 700 }}>{money(total)}</div>
                 </div>
@@ -925,6 +955,11 @@ export default function App() {
                         <button onClick={() => loadQuotation(q)} style={buttonPrimary} type="button">
                           載入
                         </button>
+
+                        <button onClick={() => duplicateQuotationToNewCustomer(q)} style={buttonOutline} type="button">
+                          新客戶
+                        </button>
+
                         <button onClick={() => deleteQuotation(q.id)} style={buttonDanger} type="button">
                           刪除
                         </button>
@@ -1044,15 +1079,6 @@ const topBar = {
   flexWrap: 'wrap',
 };
 
-const titleButton = {
-  border: 'none',
-  background: 'transparent',
-  padding: 0,
-  margin: 0,
-  cursor: 'pointer',
-  textAlign: 'left',
-};
-
 const titleWrap = {
   display: 'flex',
   alignItems: 'center',
@@ -1064,12 +1090,6 @@ const title = {
   fontWeight: 700,
   margin: 0,
   color: '#0f172a',
-};
-
-const subtitle = {
-  color: '#64748b',
-  marginTop: '8px',
-  marginBottom: 0,
 };
 
 const buttonGroup = {
