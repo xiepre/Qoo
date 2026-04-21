@@ -3,8 +3,8 @@ import { Calculator, Download, Plus, Trash2 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
-  'https://你的專案id.supabase.co',
-  '你的publishable key'
+  "https://giumltqfcdnheyxionlb.supabase.co",
+  "sb_publishable_GL-FpcqD2yhs_ncXYbQUaw_MqA6JaMn"
 );
 
 const PRICE_DATA = [
