@@ -1,5 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { Calculator, Download, Plus, Trash2 } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  "https://giumltqfcdnheyxionlb.supabase.co",
+  "sb_publishable_GL-FpcqD2yhs_ncXYbQUaw_MqA6JaMn"
+);
 
 const PRICE_DATA = [
   ['看板','一般平面','基礎',4000,'每米'],
