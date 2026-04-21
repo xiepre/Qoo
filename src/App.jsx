@@ -14,8 +14,8 @@ import {
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
-   "https://giumltqfcdnheyxionlb.supabase.co",
-  "sb_publishable_GL-FpcqD2yhs_ncXYbQUaw_MqA6JaMn"
+  "https://giumltqfcdnheyxionlb.supabase.co",
+  "sb_publishable_GL-FpcqD2yhs_ncXYbQUaw_MqA6JaMn"   
 );
 
 const PRICE_DATA = [
@@ -418,9 +418,9 @@ export default function App() {
         category,
         type,
         item,
-        qty: Number(qty),
+        qty: Math.max(1, Number(qty) || 1),
         unitPrice: Number(unitPrice),
-        subtotal: Number(subtotal),
+        subtotal: Math.max(1, Number(qty) || 1) * Number(unitPrice),
         note,
       },
     ]);
@@ -431,6 +431,22 @@ export default function App() {
 
   function removeRow(id) {
     setRows((prev) => prev.filter((row) => row.id !== id));
+  }
+
+  function updateRowQty(id, value) {
+    const nextQty = Math.max(1, Number(value) || 1);
+
+    setRows((prev) =>
+      prev.map((row) =>
+        row.id === id
+          ? {
+              ...row,
+              qty: nextQty,
+              subtotal: nextQty * Number(row.unitPrice || 0),
+            }
+          : row
+      )
+    );
   }
 
   async function loadHistory() {
@@ -808,10 +824,10 @@ export default function App() {
                     <input
                       style={input}
                       type="number"
-                      min="0"
+                      min="1"
                       step="1"
                       value={qty}
-                      onChange={(e) => setQty(Number(e.target.value))}
+                      onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
                     />
                   </div>
                 </div>
@@ -901,7 +917,21 @@ export default function App() {
                           <td style={td}>{row.category}</td>
                           <td style={td}>{row.type}</td>
                           <td style={td}>{row.item}</td>
-                          <td style={td}>{row.qty}</td>
+                          <td style={td}>
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={row.qty}
+                              onChange={(e) => updateRowQty(row.id, e.target.value)}
+                              style={{
+                                ...input,
+                                width: '90px',
+                                padding: '8px 10px',
+                                borderRadius: '10px',
+                              }}
+                            />
+                          </td>
                           <td style={td}>{money(row.unitPrice)}</td>
                           <td style={{ ...td, fontWeight: 700 }}>{money(row.subtotal)}</td>
                           <td style={td}>{row.note || '—'}</td>
