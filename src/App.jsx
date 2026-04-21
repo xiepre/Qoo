@@ -261,14 +261,14 @@ function buildCurrentQuotationCsv({ customer, quoteNo, date, rows, total }) {
   lines.push(['報價單號', quoteNo || '']);
   lines.push(['日期', date || '']);
   lines.push([]);
-  lines.push(['分類', '類型', '項目', '數量', '單價', '小計', '備註']);
+  lines.push(['分類', '類型', '項目', '單位', '單價', '小計', '備註']);
 
   rows.forEach((row) => {
     lines.push([
       row.category || '',
       row.type || '',
       row.item || '',
-      row.qty || 0,
+      `${row.qty || 0} 份`,
       row.unitPrice || 0,
       row.subtotal || 0,
       row.note || '',
@@ -290,7 +290,7 @@ function buildAllQuotationsCsv(history) {
     '分類',
     '類型',
     '項目',
-    '數量',
+    '單位',
     '單價',
     '小計',
     '備註',
@@ -325,7 +325,7 @@ function buildAllQuotationsCsv(history) {
         row.category || '',
         row.type || '',
         row.item || '',
-        row.qty || 0,
+        `${row.qty || 0} 份`,
         row.unitPrice || 0,
         row.subtotal || 0,
         row.note || '',
@@ -411,6 +411,8 @@ export default function App() {
   function addRow() {
     if (!selected || !qty) return;
 
+    const finalQty = Math.max(1, Number(qty) || 1);
+
     setRows((prev) => [
       ...prev,
       {
@@ -418,9 +420,9 @@ export default function App() {
         category,
         type,
         item,
-        qty: Math.max(1, Number(qty) || 1),
+        qty: finalQty,
         unitPrice: Number(unitPrice),
-        subtotal: Math.max(1, Number(qty) || 1) * Number(unitPrice),
+        subtotal: finalQty * Number(unitPrice),
         note,
       },
     ]);
@@ -820,15 +822,33 @@ export default function App() {
                   </div>
 
                   <div>
-                    <label style={label}>數量</label>
-                    <input
-                      style={input}
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={qty}
-                      onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
-                    />
+                    <label style={label}>單位</label>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                      }}
+                    >
+                      <input
+                        style={input}
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={qty}
+                        onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
+                      />
+                      <span
+                        style={{
+                          whiteSpace: 'nowrap',
+                          fontSize: '14px',
+                          color: '#334155',
+                          fontWeight: 600,
+                        }}
+                      >
+                        幾份
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -896,7 +916,7 @@ export default function App() {
                       <th style={th}>分類</th>
                       <th style={th}>類型</th>
                       <th style={th}>項目</th>
-                      <th style={th}>數量</th>
+                      <th style={th}>單位</th>
                       <th style={th}>單價</th>
                       <th style={th}>小計</th>
                       <th style={th}>備註</th>
@@ -918,19 +938,37 @@ export default function App() {
                           <td style={td}>{row.type}</td>
                           <td style={td}>{row.item}</td>
                           <td style={td}>
-                            <input
-                              type="number"
-                              min="1"
-                              step="1"
-                              value={row.qty}
-                              onChange={(e) => updateRowQty(row.id, e.target.value)}
+                            <div
                               style={{
-                                ...input,
-                                width: '90px',
-                                padding: '8px 10px',
-                                borderRadius: '10px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
                               }}
-                            />
+                            >
+                              <input
+                                type="number"
+                                min="1"
+                                step="1"
+                                value={row.qty}
+                                onChange={(e) => updateRowQty(row.id, e.target.value)}
+                                style={{
+                                  ...input,
+                                  width: '90px',
+                                  padding: '8px 10px',
+                                  borderRadius: '10px',
+                                }}
+                              />
+                              <span
+                                style={{
+                                  whiteSpace: 'nowrap',
+                                  fontSize: '14px',
+                                  color: '#334155',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                份
+                              </span>
+                            </div>
                           </td>
                           <td style={td}>{money(row.unitPrice)}</td>
                           <td style={{ ...td, fontWeight: 700 }}>{money(row.subtotal)}</td>
@@ -1040,7 +1078,7 @@ export default function App() {
                     <th style={th}>分類</th>
                     <th style={th}>類型</th>
                     <th style={th}>項目</th>
-                    <th style={th}>數量</th>
+                    <th style={th}>單位</th>
                     <th style={th}>單價</th>
                     <th style={th}>小計</th>
                   </tr>
@@ -1059,7 +1097,7 @@ export default function App() {
                         <td style={td}>{row.category}</td>
                         <td style={td}>{row.type}</td>
                         <td style={td}>{row.item}</td>
-                        <td style={td}>{row.qty}</td>
+                        <td style={td}>{row.qty} 份</td>
                         <td style={td}>{money(row.unitPrice)}</td>
                         <td style={{ ...td, fontWeight: 700 }}>{money(row.subtotal)}</td>
                       </tr>
