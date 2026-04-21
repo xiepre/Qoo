@@ -15,7 +15,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
    "https://giumltqfcdnheyxionlb.supabase.co",
-  "sb_publishable_GL-FpcqD2yhs_ncXYbQUaw_MqA6JaMn"'
+  "sb_publishable_GL-FpcqD2yhs_ncXYbQUaw_MqA6JaMn"
 );
 
 const PRICE_DATA = [
@@ -213,11 +213,13 @@ function buildNextQuoteNo(history) {
   const prefix = `Q${todayCompact()}-`;
   const sameDay = (history || []).filter((q) => String(q.quote_no || '').startsWith(prefix));
   let max = 0;
+
   sameDay.forEach((q) => {
     const no = String(q.quote_no || '').split('-').pop();
     const num = Number(no);
     if (!Number.isNaN(num) && num > max) max = num;
   });
+
   const next = String(max + 1).padStart(3, '0');
   return `${prefix}${next}`;
 }
@@ -254,6 +256,7 @@ function escapeCsv(value) {
 
 function buildCurrentQuotationCsv({ customer, quoteNo, date, rows, total }) {
   const lines = [];
+
   lines.push(['客戶名稱', customer || '']);
   lines.push(['報價單號', quoteNo || '']);
   lines.push(['日期', date || '']);
@@ -376,6 +379,7 @@ export default function App() {
   const filteredHistory = useMemo(() => {
     const keyword = historySearch.trim().toLowerCase();
     if (!keyword) return history;
+
     return history.filter((q) => {
       const customerText = String(q.customer || '').toLowerCase();
       const quoteText = String(q.quote_no || '').toLowerCase();
@@ -398,6 +402,8 @@ export default function App() {
     setQty(1);
     setRows([]);
     setEditingId(null);
+    setHistorySearch('');
+
     if (newQuoteNo) setQuoteNo(newQuoteNo);
     else setQuoteNo(buildNextQuoteNo(history));
   }
@@ -438,7 +444,7 @@ export default function App() {
       if (error) {
         console.error(error);
         alert('讀取歷史報價失敗');
-        return;
+        return [];
       }
 
       const list = data || [];
@@ -447,9 +453,12 @@ export default function App() {
       if (!editingId) {
         setQuoteNo(buildNextQuoteNo(list));
       }
+
+      return list;
     } catch (err) {
       console.error(err);
       alert('讀取歷史報價失敗');
+      return [];
     } finally {
       setLoadingHistory(false);
     }
@@ -498,8 +507,8 @@ export default function App() {
         setHistory(refreshedList);
         resetForm(buildNextQuoteNo(refreshedList));
       } else {
-        await loadHistory();
-        resetForm(buildNextQuoteNo(history));
+        const refreshedList = await loadHistory();
+        resetForm(buildNextQuoteNo(refreshedList));
       }
 
       setTab('editor');
@@ -526,7 +535,11 @@ export default function App() {
   }
 
   function duplicateQuotationToNewCustomer(source) {
-    const sourceRows = Array.isArray(source?.items) ? source.items : source?.rows || rows;
+    const sourceRows = Array.isArray(source)
+      ? source
+      : Array.isArray(source?.items)
+        ? source.items
+        : rows;
 
     if (!sourceRows || sourceRows.length === 0) {
       alert('這張報價沒有可複製的項目');
@@ -640,7 +653,7 @@ export default function App() {
             </button>
 
             <button
-              onClick={() => duplicateQuotationToNewCustomer({ rows })}
+              onClick={() => duplicateQuotationToNewCustomer(rows)}
               style={buttonOutline}
               type="button"
               disabled={rows.length === 0}
@@ -798,7 +811,7 @@ export default function App() {
                       min="0"
                       step="1"
                       value={qty}
-                      onChange={(e) => setQty(e.target.value)}
+                      onChange={(e) => setQty(Number(e.target.value))}
                     />
                   </div>
                 </div>
