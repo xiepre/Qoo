@@ -15,7 +15,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
   "https://giumltqfcdnheyxionlb.supabase.co",
-  "sb_publishable_GL-FpcqD2yhs_ncXYbQUaw_MqA6JaMn"   
+  "sb_publishable_GL-FpcqD2yhs_ncXYbQUaw_MqA6JaMn" 
 );
 
 const PRICE_DATA = [
@@ -341,6 +341,25 @@ function buildAllQuotationsCsv(history) {
   return lines.map((row) => row.map(escapeCsv).join(',')).join('\n');
 }
 
+function parseDimensionInput(value) {
+  if (value === null || value === undefined) return 0;
+
+  const raw = String(value).trim().toLowerCase();
+  if (!raw) return 0;
+
+  const match = raw.match(/^([0-9]+(?:\.[0-9]+)?)\s*(mm|cm|m)?$/i);
+  if (!match) return Number(raw) || 0;
+
+  const amount = Number(match[1]);
+  const unit = match[2] || 'cm';
+
+  if (unit === 'mm') return amount / 1000;
+  if (unit === 'cm') return amount / 100;
+  if (unit === 'm') return amount;
+
+  return amount;
+}
+
 export default function App() {
   const [customer, setCustomer] = useState('');
   const [date, setDate] = useState(todayString());
@@ -353,13 +372,16 @@ export default function App() {
   const [qty, setQty] = useState(1);
 
   const [calcMode, setCalcMode] = useState('rect');
-  const [calcLength, setCalcLength] = useState(1);
-  const [calcWidth, setCalcWidth] = useState(1);
-  const [calcHeight, setCalcHeight] = useState(1);
-  const [calcRadius, setCalcRadius] = useState(1);
+  const [calcLength, setCalcLength] = useState(2.4);
+  const [calcWidth, setCalcWidth] = useState(3);
+  const [calcHeight, setCalcHeight] = useState(2.4);
+  const [calcRadius, setCalcRadius] = useState(1.2);
   const [calcAngle, setCalcAngle] = useState(90);
 
-  const [unitWarning, setUnitWarning] = useState(null);
+  const [calcLengthInput, setCalcLengthInput] = useState('240cm');
+  const [calcWidthInput, setCalcWidthInput] = useState('300cm');
+  const [calcHeightInput, setCalcHeightInput] = useState('240cm');
+  const [calcRadiusInput, setCalcRadiusInput] = useState('120cm');
 
   const [rows, setRows] = useState([]);
   const [history, setHistory] = useState([]);
@@ -408,19 +430,10 @@ export default function App() {
   const unitPrice = selected?.[3] || 0;
   const note = selected?.[4] || '';
 
-  function checkUnitInput(value, setter) {
-    const num = Number(value);
-    setter(num);
-
-    if (num > 50) {
-      setUnitWarning({
-        value: num,
-        setter,
-        converted: (num / 100).toFixed(2),
-      });
-    } else {
-      setUnitWarning(null);
-    }
+  function checkUnitInput(value, setter, rawSetter = null) {
+    if (rawSetter) rawSetter(value);
+    const meter = parseDimensionInput(value);
+    setter(meter);
   }
 
   const calcSquareMeters = useMemo(() => {
@@ -483,12 +496,16 @@ export default function App() {
     setQty(1);
 
     setCalcMode('rect');
-    setCalcLength(1);
-    setCalcWidth(1);
-    setCalcHeight(1);
-    setCalcRadius(1);
+    setCalcLength(2.4);
+    setCalcWidth(3);
+    setCalcHeight(2.4);
+    setCalcRadius(1.2);
     setCalcAngle(90);
-    setUnitWarning(null);
+
+    setCalcLengthInput('240cm');
+    setCalcWidthInput('300cm');
+    setCalcHeightInput('240cm');
+    setCalcRadiusInput('120cm');
 
     setRows([]);
     setEditingId(null);
@@ -1025,7 +1042,7 @@ export default function App() {
                 </div>
 
                 <div style={calcCard}>
-                  <h3 style={calcTitle}>表面積計算機</h3>
+                  <h3 style={calcTitle}>展場面積／弧面計算器</h3>
 
                   <div style={grid4}>
                     <div>
@@ -1035,52 +1052,49 @@ export default function App() {
                         value={calcMode}
                         onChange={(e) => setCalcMode(e.target.value)}
                       >
-                        <option value="rect">長 × 寬（地台 / 天花）</option>
-                        <option value="wall">長 × 高（背牆 / 看板）</option>
-                        <option value="perimeterWall">四面牆（周長 × 高）</option>
+                        <option value="rect">平面面積（長 × 寬）</option>
+                        <option value="wall">立面面積（長 × 高）</option>
+                        <option value="perimeterWall">圍封立面（周長 × 高）</option>
                         <option value="circle">圓形面積</option>
                         <option value="sector">扇形面積</option>
-                        <option value="cylinderSide">圓柱側面積</option>
-                        <option value="arcWall">圓弧牆面</option>
+                        <option value="cylinderSide">包柱面積</option>
+                        <option value="arcWall">弧形立面</option>
                       </select>
                     </div>
 
                     {(calcMode === 'rect' || calcMode === 'wall' || calcMode === 'perimeterWall') && (
                       <>
                         <div>
-                          <label style={label}>長度（m）</label>
+                          <label style={label}>長度（cm / m / mm）</label>
                           <input
                             style={input}
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={calcLength}
-                            onChange={(e) => checkUnitInput(e.target.value, setCalcLength)}
+                            type="text"
+                            value={calcLengthInput}
+                            onChange={(e) => checkUnitInput(e.target.value, setCalcLength, setCalcLengthInput)}
+                            placeholder="例如 240cm / 2.4m / 2400mm"
                           />
                         </div>
 
                         <div>
-                          <label style={label}>寬度（m）</label>
+                          <label style={label}>寬度（cm / m / mm）</label>
                           <input
                             style={input}
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={calcWidth}
-                            onChange={(e) => checkUnitInput(e.target.value, setCalcWidth)}
+                            type="text"
+                            value={calcWidthInput}
+                            onChange={(e) => checkUnitInput(e.target.value, setCalcWidth, setCalcWidthInput)}
+                            placeholder="例如 300cm / 3m / 3000mm"
                             disabled={calcMode === 'wall'}
                           />
                         </div>
 
                         <div>
-                          <label style={label}>高度（m）</label>
+                          <label style={label}>高度（cm / m / mm）</label>
                           <input
                             style={input}
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={calcHeight}
-                            onChange={(e) => checkUnitInput(e.target.value, setCalcHeight)}
+                            type="text"
+                            value={calcHeightInput}
+                            onChange={(e) => checkUnitInput(e.target.value, setCalcHeight, setCalcHeightInput)}
+                            placeholder="例如 240cm / 2.4m / 2400mm"
                             disabled={calcMode === 'rect'}
                           />
                         </div>
@@ -1089,14 +1103,13 @@ export default function App() {
 
                     {calcMode === 'circle' && (
                       <div>
-                        <label style={label}>半徑（m）</label>
+                        <label style={label}>半徑（cm / m / mm）</label>
                         <input
                           style={input}
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={calcRadius}
-                          onChange={(e) => checkUnitInput(e.target.value, setCalcRadius)}
+                          type="text"
+                          value={calcRadiusInput}
+                          onChange={(e) => checkUnitInput(e.target.value, setCalcRadius, setCalcRadiusInput)}
+                          placeholder="例如 120cm / 1.2m / 1200mm"
                         />
                       </div>
                     )}
@@ -1104,14 +1117,13 @@ export default function App() {
                     {calcMode === 'sector' && (
                       <>
                         <div>
-                          <label style={label}>半徑（m）</label>
+                          <label style={label}>半徑（cm / m / mm）</label>
                           <input
                             style={input}
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={calcRadius}
-                            onChange={(e) => checkUnitInput(e.target.value, setCalcRadius)}
+                            type="text"
+                            value={calcRadiusInput}
+                            onChange={(e) => checkUnitInput(e.target.value, setCalcRadius, setCalcRadiusInput)}
+                            placeholder="例如 120cm / 1.2m / 1200mm"
                           />
                         </div>
 
@@ -1133,26 +1145,24 @@ export default function App() {
                     {calcMode === 'cylinderSide' && (
                       <>
                         <div>
-                          <label style={label}>半徑（m）</label>
+                          <label style={label}>半徑（cm / m / mm）</label>
                           <input
                             style={input}
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={calcRadius}
-                            onChange={(e) => checkUnitInput(e.target.value, setCalcRadius)}
+                            type="text"
+                            value={calcRadiusInput}
+                            onChange={(e) => checkUnitInput(e.target.value, setCalcRadius, setCalcRadiusInput)}
+                            placeholder="例如 120cm / 1.2m / 1200mm"
                           />
                         </div>
 
                         <div>
-                          <label style={label}>高度（m）</label>
+                          <label style={label}>高度（cm / m / mm）</label>
                           <input
                             style={input}
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={calcHeight}
-                            onChange={(e) => checkUnitInput(e.target.value, setCalcHeight)}
+                            type="text"
+                            value={calcHeightInput}
+                            onChange={(e) => checkUnitInput(e.target.value, setCalcHeight, setCalcHeightInput)}
+                            placeholder="例如 240cm / 2.4m / 2400mm"
                           />
                         </div>
                       </>
@@ -1161,14 +1171,13 @@ export default function App() {
                     {calcMode === 'arcWall' && (
                       <>
                         <div>
-                          <label style={label}>半徑（m）</label>
+                          <label style={label}>半徑（cm / m / mm）</label>
                           <input
                             style={input}
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={calcRadius}
-                            onChange={(e) => checkUnitInput(e.target.value, setCalcRadius)}
+                            type="text"
+                            value={calcRadiusInput}
+                            onChange={(e) => checkUnitInput(e.target.value, setCalcRadius, setCalcRadiusInput)}
+                            placeholder="例如 120cm / 1.2m / 1200mm"
                           />
                         </div>
 
@@ -1186,59 +1195,18 @@ export default function App() {
                         </div>
 
                         <div>
-                          <label style={label}>高度（m）</label>
+                          <label style={label}>高度（cm / m / mm）</label>
                           <input
                             style={input}
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={calcHeight}
-                            onChange={(e) => checkUnitInput(e.target.value, setCalcHeight)}
+                            type="text"
+                            value={calcHeightInput}
+                            onChange={(e) => checkUnitInput(e.target.value, setCalcHeight, setCalcHeightInput)}
+                            placeholder="例如 240cm / 2.4m / 2400mm"
                           />
                         </div>
                       </>
                     )}
                   </div>
-
-                  {unitWarning && (
-                    <div
-                      style={{
-                        marginTop: '12px',
-                        padding: '12px 16px',
-                        borderRadius: '12px',
-                        background: '#fff7ed',
-                        border: '1px solid #fdba74',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: '12px',
-                        flexWrap: 'wrap',
-                      }}
-                    >
-                      <div style={{ fontSize: '14px', color: '#9a3412' }}>
-                        ⚠️ 偵測到你輸入 <b>{unitWarning.value}</b>，是否為 cm？建議轉為 <b>{unitWarning.converted} m</b>
-                      </div>
-
-                      <button
-                        onClick={() => {
-                          unitWarning.setter(Number(unitWarning.converted));
-                          setUnitWarning(null);
-                        }}
-                        style={{
-                          padding: '6px 12px',
-                          borderRadius: '8px',
-                          border: 'none',
-                          background: '#ea580c',
-                          color: '#fff',
-                          cursor: 'pointer',
-                          fontWeight: 600,
-                        }}
-                        type="button"
-                      >
-                        一鍵轉換
-                      </button>
-                    </div>
-                  )}
 
                   <div style={{ ...grid4, marginTop: '16px' }}>
                     <div style={statCard}>
@@ -1260,13 +1228,13 @@ export default function App() {
 
                     <div style={applyCard}>
                       <button onClick={applySquareMetersToUnit} style={buttonPrimary} type="button">
-                        套用㎡到單位
+                        套用面積到計價數量
                       </button>
                     </div>
 
                     <div style={applyCard}>
                       <button onClick={applyPingToUnit} style={buttonOutline} type="button">
-                        套用坪數到單位
+                        套用坪數到計價數量
                       </button>
                     </div>
                   </div>
@@ -1286,10 +1254,10 @@ export default function App() {
                     <div style={{ fontSize: '28px' }}>💡</div>
 
                     <div style={{ lineHeight: 1.8 }}>
-                      <div style={{ fontWeight: 700, marginBottom: '6px' }}>使用提示</div>
+                      <div style={{ fontWeight: 700, marginBottom: '6px' }}>報價輸入提示</div>
 
                       <div style={{ color: '#334155', fontSize: '14px' }}>
-                        本計算機單位皆為「公尺 (m)」，請輸入公尺數值。
+                        本計算器支援輸入 mm / cm / m，系統會自動轉換為公尺（m）計算，適用於展場背牆、地台、天花、弧形立面與包柱面積估算。
                       </div>
 
                       <div style={{ marginTop: '8px', fontSize: '14px', color: '#1e3a8a' }}>
@@ -1297,9 +1265,9 @@ export default function App() {
                       </div>
 
                       <ul style={{ margin: '6px 0 0 18px', color: '#1e3a8a', fontSize: '14px' }}>
-                        <li>240cm → 請輸入 2.4</li>
-                        <li>300cm → 請輸入 3</li>
-                        <li>450cm → 請輸入 4.5</li>
+                        <li>240cm → 自動換算為 2.4m</li>
+                        <li>2.4m → 直接使用</li>
+                        <li>2400mm → 自動換算為 2.4m</li>
                       </ul>
                     </div>
                   </div>
@@ -1374,8 +1342,8 @@ export default function App() {
                       <th style={th}>分類</th>
                       <th style={th}>類型</th>
                       <th style={th}>項目</th>
-                      <th style={th}>單位</th>
-                      <th style={th}>份數</th>
+                      <th style={th}>計價數量</th>
+                      <th style={th}>數量</th>
                       <th style={th}>單價</th>
                       <th style={th}>小計</th>
                       <th style={th}>備註</th>
@@ -1534,8 +1502,8 @@ export default function App() {
                     <th style={th}>分類</th>
                     <th style={th}>類型</th>
                     <th style={th}>項目</th>
-                    <th style={th}>單位</th>
-                    <th style={th}>份數</th>
+                    <th style={th}>計價數量</th>
+                    <th style={th}>數量</th>
                     <th style={th}>單價</th>
                     <th style={th}>小計</th>
                   </tr>
