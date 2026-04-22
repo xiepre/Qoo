@@ -14,8 +14,8 @@ import {
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
-   "https://giumltqfcdnheyxionlb.supabase.co",
-  "sb_publishable_GL-FpcqD2yhs_ncXYbQUaw_MqA6JaMn"  
+  "https://giumltqfcdnheyxionlb.supabase.co",
+  "sb_publishable_GL-FpcqD2yhs_ncXYbQUaw_MqA6JaMn"   
 );
 
 const PRICE_DATA = [
@@ -359,6 +359,8 @@ export default function App() {
   const [calcRadius, setCalcRadius] = useState(1);
   const [calcAngle, setCalcAngle] = useState(90);
 
+  const [unitWarning, setUnitWarning] = useState(null);
+
   const [rows, setRows] = useState([]);
   const [history, setHistory] = useState([]);
   const [historySearch, setHistorySearch] = useState('');
@@ -384,15 +386,42 @@ export default function App() {
   );
 
   useEffect(() => {
+    const typeText = String(type || '');
+    const itemText = String(item || '');
+
+    if (typeText.includes('圓弧') || itemText.includes('圓弧')) {
+      setCalcMode('arcWall');
+      return;
+    }
+
     if (category === '天花板' || category === '地台') {
       setCalcMode('rect');
-    } else if (category === '背牆' || category === '看板') {
-      setCalcMode('wall');
+      return;
     }
-  }, [category]);
+
+    if (category === '背牆' || category === '看板') {
+      setCalcMode('wall');
+      return;
+    }
+  }, [category, type, item]);
 
   const unitPrice = selected?.[3] || 0;
   const note = selected?.[4] || '';
+
+  function checkUnitInput(value, setter) {
+    const num = Number(value);
+    setter(num);
+
+    if (num > 50) {
+      setUnitWarning({
+        value: num,
+        setter,
+        converted: (num / 100).toFixed(2),
+      });
+    } else {
+      setUnitWarning(null);
+    }
+  }
 
   const calcSquareMeters = useMemo(() => {
     const l = Number(calcLength || 0);
@@ -459,6 +488,7 @@ export default function App() {
     setCalcHeight(1);
     setCalcRadius(1);
     setCalcAngle(90);
+    setUnitWarning(null);
 
     setRows([]);
     setEditingId(null);
@@ -1025,7 +1055,7 @@ export default function App() {
                             min="0"
                             step="0.01"
                             value={calcLength}
-                            onChange={(e) => setCalcLength(Number(e.target.value))}
+                            onChange={(e) => checkUnitInput(e.target.value, setCalcLength)}
                           />
                         </div>
 
@@ -1037,7 +1067,7 @@ export default function App() {
                             min="0"
                             step="0.01"
                             value={calcWidth}
-                            onChange={(e) => setCalcWidth(Number(e.target.value))}
+                            onChange={(e) => checkUnitInput(e.target.value, setCalcWidth)}
                             disabled={calcMode === 'wall'}
                           />
                         </div>
@@ -1050,7 +1080,7 @@ export default function App() {
                             min="0"
                             step="0.01"
                             value={calcHeight}
-                            onChange={(e) => setCalcHeight(Number(e.target.value))}
+                            onChange={(e) => checkUnitInput(e.target.value, setCalcHeight)}
                             disabled={calcMode === 'rect'}
                           />
                         </div>
@@ -1066,7 +1096,7 @@ export default function App() {
                           min="0"
                           step="0.01"
                           value={calcRadius}
-                          onChange={(e) => setCalcRadius(Number(e.target.value))}
+                          onChange={(e) => checkUnitInput(e.target.value, setCalcRadius)}
                         />
                       </div>
                     )}
@@ -1081,7 +1111,7 @@ export default function App() {
                             min="0"
                             step="0.01"
                             value={calcRadius}
-                            onChange={(e) => setCalcRadius(Number(e.target.value))}
+                            onChange={(e) => checkUnitInput(e.target.value, setCalcRadius)}
                           />
                         </div>
 
@@ -1110,7 +1140,7 @@ export default function App() {
                             min="0"
                             step="0.01"
                             value={calcRadius}
-                            onChange={(e) => setCalcRadius(Number(e.target.value))}
+                            onChange={(e) => checkUnitInput(e.target.value, setCalcRadius)}
                           />
                         </div>
 
@@ -1122,7 +1152,7 @@ export default function App() {
                             min="0"
                             step="0.01"
                             value={calcHeight}
-                            onChange={(e) => setCalcHeight(Number(e.target.value))}
+                            onChange={(e) => checkUnitInput(e.target.value, setCalcHeight)}
                           />
                         </div>
                       </>
@@ -1138,7 +1168,7 @@ export default function App() {
                             min="0"
                             step="0.01"
                             value={calcRadius}
-                            onChange={(e) => setCalcRadius(Number(e.target.value))}
+                            onChange={(e) => checkUnitInput(e.target.value, setCalcRadius)}
                           />
                         </div>
 
@@ -1163,12 +1193,52 @@ export default function App() {
                             min="0"
                             step="0.01"
                             value={calcHeight}
-                            onChange={(e) => setCalcHeight(Number(e.target.value))}
+                            onChange={(e) => checkUnitInput(e.target.value, setCalcHeight)}
                           />
                         </div>
                       </>
                     )}
                   </div>
+
+                  {unitWarning && (
+                    <div
+                      style={{
+                        marginTop: '12px',
+                        padding: '12px 16px',
+                        borderRadius: '12px',
+                        background: '#fff7ed',
+                        border: '1px solid #fdba74',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '12px',
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <div style={{ fontSize: '14px', color: '#9a3412' }}>
+                        ⚠️ 偵測到你輸入 <b>{unitWarning.value}</b>，是否為 cm？建議轉為 <b>{unitWarning.converted} m</b>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          unitWarning.setter(Number(unitWarning.converted));
+                          setUnitWarning(null);
+                        }}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                          border: 'none',
+                          background: '#ea580c',
+                          color: '#fff',
+                          cursor: 'pointer',
+                          fontWeight: 600,
+                        }}
+                        type="button"
+                      >
+                        一鍵轉換
+                      </button>
+                    </div>
+                  )}
 
                   <div style={{ ...grid4, marginTop: '16px' }}>
                     <div style={statCard}>
@@ -1198,6 +1268,39 @@ export default function App() {
                       <button onClick={applyPingToUnit} style={buttonOutline} type="button">
                         套用坪數到單位
                       </button>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: '16px',
+                      border: '2px dashed #93c5fd',
+                      borderRadius: '16px',
+                      padding: '16px',
+                      background: '#eff6ff',
+                      display: 'flex',
+                      gap: '16px',
+                      alignItems: 'flex-start',
+                    }}
+                  >
+                    <div style={{ fontSize: '28px' }}>💡</div>
+
+                    <div style={{ lineHeight: 1.8 }}>
+                      <div style={{ fontWeight: 700, marginBottom: '6px' }}>使用提示</div>
+
+                      <div style={{ color: '#334155', fontSize: '14px' }}>
+                        本計算機單位皆為「公尺 (m)」，請輸入公尺數值。
+                      </div>
+
+                      <div style={{ marginTop: '8px', fontSize: '14px', color: '#1e3a8a' }}>
+                        常見換算範例：
+                      </div>
+
+                      <ul style={{ margin: '6px 0 0 18px', color: '#1e3a8a', fontSize: '14px' }}>
+                        <li>240cm → 請輸入 2.4</li>
+                        <li>300cm → 請輸入 3</li>
+                        <li>450cm → 請輸入 4.5</li>
+                      </ul>
                     </div>
                   </div>
                 </div>
