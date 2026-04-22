@@ -14,8 +14,8 @@ import {
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
-  "https://giumltqfcdnheyxionlb.supabase.co",
-  "sb_publishable_GL-FpcqD2yhs_ncXYbQUaw_MqA6JaMn"   
+   "https://giumltqfcdnheyxionlb.supabase.co",
+  "sb_publishable_GL-FpcqD2yhs_ncXYbQUaw_MqA6JaMn"  
 );
 
 const PRICE_DATA = [
@@ -356,6 +356,8 @@ export default function App() {
   const [calcLength, setCalcLength] = useState(1);
   const [calcWidth, setCalcWidth] = useState(1);
   const [calcHeight, setCalcHeight] = useState(1);
+  const [calcRadius, setCalcRadius] = useState(1);
+  const [calcAngle, setCalcAngle] = useState(90);
 
   const [rows, setRows] = useState([]);
   const [history, setHistory] = useState([]);
@@ -396,14 +398,30 @@ export default function App() {
     const l = Number(calcLength || 0);
     const w = Number(calcWidth || 0);
     const h = Number(calcHeight || 0);
+    const r = Number(calcRadius || 0);
+    const a = Number(calcAngle || 0);
 
     if (calcMode === 'rect') return l * w;
     if (calcMode === 'wall') return l * h;
     if (calcMode === 'perimeterWall') return (l * 2 + w * 2) * h;
+    if (calcMode === 'circle') return Math.PI * r * r;
+    if (calcMode === 'sector') return Math.PI * r * r * (a / 360);
+    if (calcMode === 'cylinderSide') return 2 * Math.PI * r * h;
+    if (calcMode === 'arcWall') {
+      const arcLength = 2 * Math.PI * r * (a / 360);
+      return arcLength * h;
+    }
+
     return 0;
-  }, [calcMode, calcLength, calcWidth, calcHeight]);
+  }, [calcMode, calcLength, calcWidth, calcHeight, calcRadius, calcAngle]);
 
   const calcPing = useMemo(() => calcSquareMeters / 3.305785, [calcSquareMeters]);
+
+  const calcArcLength = useMemo(() => {
+    const r = Number(calcRadius || 0);
+    const a = Number(calcAngle || 0);
+    return 2 * Math.PI * r * (a / 360);
+  }, [calcRadius, calcAngle]);
 
   const subtotal =
     Number(unitQty || 0) * Number(qty || 0) * Number(unitPrice || 0);
@@ -439,6 +457,8 @@ export default function App() {
     setCalcLength(1);
     setCalcWidth(1);
     setCalcHeight(1);
+    setCalcRadius(1);
+    setCalcAngle(90);
 
     setRows([]);
     setEditingId(null);
@@ -988,46 +1008,166 @@ export default function App() {
                         <option value="rect">長 × 寬（地台 / 天花）</option>
                         <option value="wall">長 × 高（背牆 / 看板）</option>
                         <option value="perimeterWall">四面牆（周長 × 高）</option>
+                        <option value="circle">圓形面積</option>
+                        <option value="sector">扇形面積</option>
+                        <option value="cylinderSide">圓柱側面積</option>
+                        <option value="arcWall">圓弧牆面</option>
                       </select>
                     </div>
 
-                    <div>
-                      <label style={label}>長度（m）</label>
-                      <input
-                        style={input}
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={calcLength}
-                        onChange={(e) => setCalcLength(Number(e.target.value))}
-                      />
-                    </div>
+                    {(calcMode === 'rect' || calcMode === 'wall' || calcMode === 'perimeterWall') && (
+                      <>
+                        <div>
+                          <label style={label}>長度（m）</label>
+                          <input
+                            style={input}
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={calcLength}
+                            onChange={(e) => setCalcLength(Number(e.target.value))}
+                          />
+                        </div>
 
-                    <div>
-                      <label style={label}>寬度（m）</label>
-                      <input
-                        style={input}
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={calcWidth}
-                        onChange={(e) => setCalcWidth(Number(e.target.value))}
-                        disabled={calcMode === 'wall'}
-                      />
-                    </div>
+                        <div>
+                          <label style={label}>寬度（m）</label>
+                          <input
+                            style={input}
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={calcWidth}
+                            onChange={(e) => setCalcWidth(Number(e.target.value))}
+                            disabled={calcMode === 'wall'}
+                          />
+                        </div>
 
-                    <div>
-                      <label style={label}>高度（m）</label>
-                      <input
-                        style={input}
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={calcHeight}
-                        onChange={(e) => setCalcHeight(Number(e.target.value))}
-                        disabled={calcMode === 'rect'}
-                      />
-                    </div>
+                        <div>
+                          <label style={label}>高度（m）</label>
+                          <input
+                            style={input}
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={calcHeight}
+                            onChange={(e) => setCalcHeight(Number(e.target.value))}
+                            disabled={calcMode === 'rect'}
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {calcMode === 'circle' && (
+                      <div>
+                        <label style={label}>半徑（m）</label>
+                        <input
+                          style={input}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={calcRadius}
+                          onChange={(e) => setCalcRadius(Number(e.target.value))}
+                        />
+                      </div>
+                    )}
+
+                    {calcMode === 'sector' && (
+                      <>
+                        <div>
+                          <label style={label}>半徑（m）</label>
+                          <input
+                            style={input}
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={calcRadius}
+                            onChange={(e) => setCalcRadius(Number(e.target.value))}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={label}>角度（°）</label>
+                          <input
+                            style={input}
+                            type="number"
+                            min="0"
+                            max="360"
+                            step="1"
+                            value={calcAngle}
+                            onChange={(e) => setCalcAngle(Number(e.target.value))}
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {calcMode === 'cylinderSide' && (
+                      <>
+                        <div>
+                          <label style={label}>半徑（m）</label>
+                          <input
+                            style={input}
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={calcRadius}
+                            onChange={(e) => setCalcRadius(Number(e.target.value))}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={label}>高度（m）</label>
+                          <input
+                            style={input}
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={calcHeight}
+                            onChange={(e) => setCalcHeight(Number(e.target.value))}
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {calcMode === 'arcWall' && (
+                      <>
+                        <div>
+                          <label style={label}>半徑（m）</label>
+                          <input
+                            style={input}
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={calcRadius}
+                            onChange={(e) => setCalcRadius(Number(e.target.value))}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={label}>角度（°）</label>
+                          <input
+                            style={input}
+                            type="number"
+                            min="0"
+                            max="360"
+                            step="1"
+                            value={calcAngle}
+                            onChange={(e) => setCalcAngle(Number(e.target.value))}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={label}>高度（m）</label>
+                          <input
+                            style={input}
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={calcHeight}
+                            onChange={(e) => setCalcHeight(Number(e.target.value))}
+                          />
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   <div style={{ ...grid4, marginTop: '16px' }}>
@@ -1040,6 +1180,13 @@ export default function App() {
                       <div style={statLabel}>坪數</div>
                       <div style={statValue}>{calcPing.toFixed(2)} 坪</div>
                     </div>
+
+                    {(calcMode === 'sector' || calcMode === 'arcWall') && (
+                      <div style={statCard}>
+                        <div style={statLabel}>弧長</div>
+                        <div style={statValue}>{calcArcLength.toFixed(2)} m</div>
+                      </div>
+                    )}
 
                     <div style={applyCard}>
                       <button onClick={applySquareMetersToUnit} style={buttonPrimary} type="button">
