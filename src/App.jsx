@@ -14,8 +14,8 @@ import {
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
-  "https://giumltqfcdnheyxionlb.supabase.co",
-  "sb_publishable_GL-FpcqD2yhs_ncXYbQUaw_MqA6JaMn" 
+ "https://giumltqfcdnheyxionlb.supabase.co",
+  "sb_publishable_GL-FpcqD2yhs_ncXYbQUaw_MqA6JaMn"  
 );
 
 const PRICE_DATA = [
