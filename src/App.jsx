@@ -851,7 +851,7 @@ export default function App() {
         <div style={topBar} className="no-print">
           <div style={titleWrap}>
             <div>
-              <h1 style={title}>好帥報價系統</h1>
+              <h1 style={title}>克里斯報價系統</h1>
             </div>
           </div>
 
