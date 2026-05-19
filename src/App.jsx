@@ -15,6 +15,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
  "https://giumltqfcdnheyxionlb.supabase.co",
+  https://giumltqfcdnheyxionlb.supabase.co
   "sb_publishable_GL-FpcqD2yhs_ncXYbQUaw_MqA6JaMn"  
 );
 
@@ -209,6 +210,15 @@ function todayCompact() {
   return todayString().replace(/-/g, '');
 }
 
+function calcSubtotal(row) {
+  return (
+    Number(row.unitQty || 0) *
+    Number(row.qty || 0) *
+    Number(row.unitPrice || 0) *
+    (1 + Number(row.adjustPercent || 0) / 100)
+  );
+}
+
 function buildNextQuoteNo(history) {
   const prefix = `Q${todayCompact()}-`;
   const sameDay = (history || []).filter((q) => String(q.quote_no || '').startsWith(prefix));
@@ -261,7 +271,7 @@ function buildCurrentQuotationCsv({ customer, quoteNo, date, rows, total }) {
   lines.push(['報價單號', quoteNo || '']);
   lines.push(['日期', date || '']);
   lines.push([]);
-  lines.push(['分類', '類型', '項目', '單位', '份數', '單價', '小計', '備註']);
+  lines.push(['分類', '類型', '項目', '計價數量', '數量', '增減％', '單價', '小計', '備註']);
 
   rows.forEach((row) => {
     lines.push([
@@ -270,6 +280,7 @@ function buildCurrentQuotationCsv({ customer, quoteNo, date, rows, total }) {
       row.item || '',
       row.unitQty || 0,
       row.qty || 0,
+      row.adjustPercent || 0,
       row.unitPrice || 0,
       row.subtotal || 0,
       row.note || '',
@@ -277,7 +288,7 @@ function buildCurrentQuotationCsv({ customer, quoteNo, date, rows, total }) {
   });
 
   lines.push([]);
-  lines.push(['總計', '', '', '', '', '', total || 0, '']);
+  lines.push(['總計', '', '', '', '', '', '', total || 0, '']);
 
   return lines.map((row) => row.map(escapeCsv).join(',')).join('\n');
 }
@@ -291,8 +302,9 @@ function buildAllQuotationsCsv(history) {
     '分類',
     '類型',
     '項目',
-    '單位',
-    '份數',
+    '計價數量',
+    '數量',
+    '增減％',
     '單價',
     '小計',
     '備註',
@@ -307,6 +319,7 @@ function buildAllQuotationsCsv(history) {
         quotation.customer || '',
         quotation.quote_no || '',
         quotation.date || '',
+        '',
         '',
         '',
         '',
@@ -330,6 +343,7 @@ function buildAllQuotationsCsv(history) {
         row.item || '',
         row.unitQty || 0,
         row.qty || 0,
+        row.adjustPercent || 0,
         row.unitPrice || 0,
         row.subtotal || 0,
         row.note || '',
@@ -358,6 +372,25 @@ function parseDimensionInput(value) {
   if (unit === 'm') return amount;
 
   return amount;
+}
+
+function normalizeQuotationRows(items) {
+  return Array.isArray(items)
+    ? items.map((row) => {
+        const normalizedRow = {
+          ...row,
+          unitQty: Number(row.unitQty || 1),
+          qty: Number(row.qty || 1),
+          adjustPercent: Number(row.adjustPercent || 0),
+          unitPrice: Number(row.unitPrice || 0),
+        };
+
+        return {
+          ...normalizedRow,
+          subtotal: Number(row.subtotal || 0) || calcSubtotal(normalizedRow),
+        };
+      })
+    : [];
 }
 
 export default function App() {
@@ -423,7 +456,6 @@ export default function App() {
 
     if (category === '背牆' || category === '看板') {
       setCalcMode('wall');
-      return;
     }
   }, [category, type, item]);
 
@@ -465,8 +497,7 @@ export default function App() {
     return 2 * Math.PI * r * (a / 360);
   }, [calcRadius, calcAngle]);
 
-  const subtotal =
-    Number(unitQty || 0) * Number(qty || 0) * Number(unitPrice || 0);
+  const subtotal = Number(unitQty || 0) * Number(qty || 0) * Number(unitPrice || 0);
   const total = rows.reduce((sum, row) => sum + Number(row.subtotal || 0), 0);
 
   const filteredHistory = useMemo(() => {
@@ -531,18 +562,23 @@ export default function App() {
     const finalUnitQty = Math.max(0.01, Number(unitQty) || 1);
     const finalQty = Math.max(1, Number(qty) || 1);
 
+    const nextRow = {
+      id: makeRowId(),
+      category,
+      type,
+      item,
+      unitQty: finalUnitQty,
+      qty: finalQty,
+      adjustPercent: 0,
+      unitPrice: Number(unitPrice),
+      note,
+    };
+
     setRows((prev) => [
       ...prev,
       {
-        id: makeRowId(),
-        category,
-        type,
-        item,
-        unitQty: finalUnitQty,
-        qty: finalQty,
-        unitPrice: Number(unitPrice),
-        subtotal: finalUnitQty * finalQty * Number(unitPrice),
-        note,
+        ...nextRow,
+        subtotal: calcSubtotal(nextRow),
       },
     ]);
 
@@ -559,15 +595,19 @@ export default function App() {
     const nextUnitQty = Math.max(0.01, Number(value) || 0.01);
 
     setRows((prev) =>
-      prev.map((row) =>
-        row.id === id
-          ? {
-              ...row,
-              unitQty: nextUnitQty,
-              subtotal: nextUnitQty * Number(row.qty || 0) * Number(row.unitPrice || 0),
-            }
-          : row
-      )
+      prev.map((row) => {
+        if (row.id !== id) return row;
+
+        const nextRow = {
+          ...row,
+          unitQty: nextUnitQty,
+        };
+
+        return {
+          ...nextRow,
+          subtotal: calcSubtotal(nextRow),
+        };
+      })
     );
   }
 
@@ -575,15 +615,39 @@ export default function App() {
     const nextQty = Math.max(1, Number(value) || 1);
 
     setRows((prev) =>
-      prev.map((row) =>
-        row.id === id
-          ? {
-              ...row,
-              qty: nextQty,
-              subtotal: Number(row.unitQty || 0) * nextQty * Number(row.unitPrice || 0),
-            }
-          : row
-      )
+      prev.map((row) => {
+        if (row.id !== id) return row;
+
+        const nextRow = {
+          ...row,
+          qty: nextQty,
+        };
+
+        return {
+          ...nextRow,
+          subtotal: calcSubtotal(nextRow),
+        };
+      })
+    );
+  }
+
+  function updateRowAdjustPercent(id, value) {
+    const nextPercent = Number(value) || 0;
+
+    setRows((prev) =>
+      prev.map((row) => {
+        if (row.id !== id) return row;
+
+        const nextRow = {
+          ...row,
+          adjustPercent: nextPercent,
+        };
+
+        return {
+          ...nextRow,
+          subtotal: calcSubtotal(nextRow),
+        };
+      })
     );
   }
 
@@ -603,18 +667,7 @@ export default function App() {
 
       const normalized = (data || []).map((q) => ({
         ...q,
-        items: Array.isArray(q.items)
-          ? q.items.map((row) => ({
-              ...row,
-              unitQty: Number(row.unitQty || 1),
-              qty: Number(row.qty || 1),
-              subtotal:
-                Number(row.subtotal || 0) ||
-                Number(row.unitPrice || 0) *
-                  Number(row.unitQty || 1) *
-                  Number(row.qty || 1),
-            }))
-          : [],
+        items: normalizeQuotationRows(q.items),
       }));
 
       setHistory(normalized);
@@ -674,18 +727,7 @@ export default function App() {
       if (!refreshError) {
         const refreshedList = (refreshedData || []).map((q) => ({
           ...q,
-          items: Array.isArray(q.items)
-            ? q.items.map((row) => ({
-                ...row,
-                unitQty: Number(row.unitQty || 1),
-                qty: Number(row.qty || 1),
-                subtotal:
-                  Number(row.subtotal || 0) ||
-                  Number(row.unitPrice || 0) *
-                    Number(row.unitQty || 1) *
-                    Number(row.qty || 1),
-              }))
-            : [],
+          items: normalizeQuotationRows(q.items),
         }));
         setHistory(refreshedList);
         resetForm(buildNextQuoteNo(refreshedList));
@@ -707,22 +749,7 @@ export default function App() {
     setCustomer(q.customer || '');
     setQuoteNo(q.quote_no || '');
     setDate(q.date || todayString());
-    setRows(
-      Array.isArray(q.items)
-        ? cloneRows(
-            q.items.map((row) => ({
-              ...row,
-              unitQty: Number(row.unitQty || 1),
-              qty: Number(row.qty || 1),
-              subtotal:
-                Number(row.subtotal || 0) ||
-                Number(row.unitPrice || 0) *
-                  Number(row.unitQty || 1) *
-                  Number(row.qty || 1),
-            }))
-          )
-        : []
-    );
+    setRows(cloneRows(normalizeQuotationRows(q.items)));
     setEditingId(q.id);
     setCategory('');
     setType('');
@@ -751,20 +778,7 @@ export default function App() {
     setCustomer('');
     setQuoteNo(buildNextQuoteNo(history));
     setDate(todayString());
-    setRows(
-      cloneRows(
-        sourceRows.map((row) => ({
-          ...row,
-          unitQty: Number(row.unitQty || 1),
-          qty: Number(row.qty || 1),
-          subtotal:
-            Number(row.subtotal || 0) ||
-            Number(row.unitPrice || 0) *
-              Number(row.unitQty || 1) *
-              Number(row.qty || 1),
-        }))
-      )
-    );
+    setRows(cloneRows(normalizeQuotationRows(sourceRows)));
     setEditingId(null);
     setCategory('');
     setType('');
@@ -1239,18 +1253,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div
-                    style={{
-                      marginTop: '16px',
-                      border: '2px dashed #93c5fd',
-                      borderRadius: '16px',
-                      padding: '16px',
-                      background: '#eff6ff',
-                      display: 'flex',
-                      gap: '16px',
-                      alignItems: 'flex-start',
-                    }}
-                  >
+                  <div style={hintBox}>
                     <div style={{ fontSize: '28px' }}>💡</div>
 
                     <div style={{ lineHeight: 1.8 }}>
@@ -1344,6 +1347,7 @@ export default function App() {
                       <th style={th}>項目</th>
                       <th style={th}>計價數量</th>
                       <th style={th}>數量</th>
+                      <th style={th}>增減％</th>
                       <th style={th}>單價</th>
                       <th style={th}>小計</th>
                       <th style={th}>備註</th>
@@ -1354,7 +1358,7 @@ export default function App() {
                   <tbody>
                     {rows.length === 0 ? (
                       <tr>
-                        <td colSpan="9" style={emptyTd}>
+                        <td colSpan="10" style={emptyTd}>
                           尚未加入任何項目
                         </td>
                       </tr>
@@ -1386,6 +1390,21 @@ export default function App() {
                               step="1"
                               value={row.qty}
                               onChange={(e) => updateRowQty(row.id, e.target.value)}
+                              style={{
+                                ...input,
+                                width: '110px',
+                                padding: '8px 10px',
+                                borderRadius: '10px',
+                              }}
+                            />
+                          </td>
+                          <td style={td}>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={row.adjustPercent || 0}
+                              onChange={(e) => updateRowAdjustPercent(row.id, e.target.value)}
+                              placeholder="+10 或 -5"
                               style={{
                                 ...input,
                                 width: '110px',
@@ -1504,6 +1523,7 @@ export default function App() {
                     <th style={th}>項目</th>
                     <th style={th}>計價數量</th>
                     <th style={th}>數量</th>
+                    <th style={th}>增減％</th>
                     <th style={th}>單價</th>
                     <th style={th}>小計</th>
                   </tr>
@@ -1512,7 +1532,7 @@ export default function App() {
                 <tbody>
                   {rows.length === 0 ? (
                     <tr>
-                      <td colSpan="7" style={emptyTd}>
+                      <td colSpan="8" style={emptyTd}>
                         尚未加入任何項目
                       </td>
                     </tr>
@@ -1524,6 +1544,7 @@ export default function App() {
                         <td style={td}>{row.item}</td>
                         <td style={td}>{row.unitQty || 1}</td>
                         <td style={td}>{row.qty}</td>
+                        <td style={td}>{Number(row.adjustPercent || 0)}%</td>
                         <td style={td}>{money(row.unitPrice)}</td>
                         <td style={{ ...td, fontWeight: 700 }}>{money(row.subtotal)}</td>
                       </tr>
@@ -1533,7 +1554,7 @@ export default function App() {
 
                 <tfoot>
                   <tr>
-                    <td colSpan="5" style={td}></td>
+                    <td colSpan="6" style={td}></td>
                     <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>總計</td>
                     <td style={{ ...td, fontSize: '24px', fontWeight: 700 }} className="print-total">
                       {money(total)}
@@ -1890,4 +1911,15 @@ const previewHeader = {
   paddingBottom: '24px',
   marginBottom: '24px',
   flexWrap: 'wrap',
+};
+
+const hintBox = {
+  marginTop: '16px',
+  border: '2px dashed #93c5fd',
+  borderRadius: '16px',
+  padding: '16px',
+  background: '#eff6ff',
+  display: 'flex',
+  gap: '16px',
+  alignItems: 'flex-start',
 };
